@@ -2027,39 +2027,6 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
               <div className="border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 flex flex-col gap-4">
                 <div className="flex justify-between items-center">
                   <h4 className="font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                    <MessageSquare size={18} className="text-emerald-500" />{" "}
-                    WhatsApp API
-                  </h4>
-                  <span className="text-xs font-bold px-2 py-1 bg-emerald-500/10 text-emerald-500 rounded-lg">
-                    Saudável
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-zinc-500">
-                      Mensagens Enviadas (Total)
-                    </span>
-                    <span className="font-mono text-zinc-900 dark:text-white font-medium">
-                      {usageLogs.length}
-                    </span>
-                  </div>
-                  <div className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-2">
-                    <div
-                      className="bg-emerald-500 h-2 rounded-full"
-                      style={{
-                        width: `${Math.min(100, (usageLogs.length / 5000) * 100)}%`,
-                      }}
-                    ></div>
-                  </div>
-                  <span className="text-xs text-zinc-500">
-                    Uso atual da quota global
-                  </span>
-                </div>
-              </div>
-
-              <div className="border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 flex flex-col gap-4">
-                <div className="flex justify-between items-center">
-                  <h4 className="font-bold text-zinc-800 dark:text-white flex items-center gap-2">
                     <Users size={18} className="text-amber-500" /> Usuários
                   </h4>
                   <span className="text-xs font-bold px-2 py-1 bg-amber-500/10 text-amber-500 rounded-lg">
