@@ -29,27 +29,12 @@ export const fetchOrganizationMinistries = async (
   const sb = getSupabase();
   if (!sb || !orgId) return [];
 
-  let data;
-  let error;
-
-  // Try selecting whatsapp_enabled first (fail quietly if column doesn't exist)
-  const { data: dataWithWhatsApp, error: err1 } = await sb
+  const { data, error } = await sb
     .from("organization_ministries")
-    .select("id, code, label, enabled_tabs, whatsapp_enabled")
+    .select("id, code, label, enabled_tabs")
     .eq("organization_id", orgId);
 
-  if (err1) {
-    // Fallback to legacy query if the column isn't there
-    const { data: dataLegacy, error: err2 } = await sb
-      .from("organization_ministries")
-      .select("id, code, label, enabled_tabs")
-      .eq("organization_id", orgId);
-
-    if (err2) throw err2;
-    data = dataLegacy;
-  } else {
-    data = dataWithWhatsApp;
-  }
+  if (error) throw error;
 
   return (data || []).map((m: any) => ({
     id: m.id,
@@ -57,8 +42,6 @@ export const fetchOrganizationMinistries = async (
     label: m.label || "Sem nome",
     organizationId: orgId,
     enabledTabs: m.enabled_tabs,
-    whatsapp_enabled:
-      m.whatsapp_enabled !== undefined ? m.whatsapp_enabled : true,
   }));
 };
 
@@ -134,7 +117,7 @@ export const fetchMinistrySettings = async (
   const { data: settings } = await sb
     .from("ministry_settings")
     .select(
-      "*, spotify_client_id, spotify_client_secret, youtube_api_key, qr_code_url, social_link_url, whatsapp_custom_message, practical_guidelines",
+      "*, spotify_client_id, spotify_client_secret, youtube_api_key, qr_code_url, social_link_url, practical_guidelines",
     )
     .eq("ministry_id", ministryId)
     .eq("organization_id", orgId)
@@ -164,7 +147,6 @@ export const fetchMinistrySettings = async (
       quickAccessFromTabs.length > 0
         ? quickAccessFromTabs
         : (settings as any)?.quick_access_items,
-    whatsappCustomMessage: settings?.whatsapp_custom_message || undefined,
   };
 
   return result;
@@ -391,7 +373,6 @@ export const saveMinistrySettings = async (
   qrCodeUrl?: string,
   socialLinkUrl?: string,
   quickAccessItems?: string[],
-  whatsappCustomMessage?: string | null,
   practicalGuidelines?: string,
 ) => {
   const sb = getSupabase();
@@ -409,9 +390,6 @@ export const saveMinistrySettings = async (
   if (socialLinkUrl !== undefined) updates.social_link_url = socialLinkUrl;
   if (practicalGuidelines !== undefined)
     updates.practical_guidelines = practicalGuidelines;
-  // null limpa a mensagem; string salva; undefined não altera
-  if (whatsappCustomMessage !== undefined)
-    updates.whatsapp_custom_message = whatsappCustomMessage;
   if (Object.keys(updates).length > 0) {
     const { error } = await sb.from("ministry_settings").upsert(
       {

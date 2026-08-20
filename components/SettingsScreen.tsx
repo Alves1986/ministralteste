@@ -16,13 +16,10 @@ import {
   ArrowRight,
   CreditCard,
   Zap,
-  CheckCircle2,
-  MessageCircle,
   ExternalLink,
   X,
   Image as ImageIcon,
   Upload,
-  Crown,
   Sparkles,
   Plus,
   Building2,
@@ -32,8 +29,6 @@ import { LegalModal, LegalDocType } from "./LegalDocuments";
 import { ThemeMode, Organization, MinistryDef } from "../types";
 import { sendNotificationSQL, getSupabase } from "../services/supabaseService";
 import { getSystemLogo } from "../utils/branding";
-import { WhatsAppNotificationSettings } from "./WhatsAppNotificationSettings";
-import { MinistryWhatsAppConnect } from "./MinistryWhatsAppConnect";
 
 interface NewMinistryData {
   code: string;
@@ -65,11 +60,6 @@ interface Props {
   ) => Promise<void>;
   onSaveGuidelines?: (guidelines: string) => Promise<void>;
   onSaveOrgLogo?: (file: File | null) => Promise<string | null>;
-  onToggleWhatsApp?: (enabled: boolean) => Promise<void>;
-  onToggleMinistryWhatsApp?: (
-    ministryId: string,
-    enabled: boolean,
-  ) => Promise<void>;
   ministries?: MinistryDef[];
   isOrgAdmin?: boolean;
   onRefreshMinistries?: () => Promise<void>;
@@ -114,8 +104,6 @@ export const SettingsScreen: React.FC<Props> = ({
   onSaveGuidelines,
   onSaveOrgLogo,
   ministries = [],
-  onToggleWhatsApp,
-  onToggleMinistryWhatsApp,
   events,
   isOrgAdmin = false,
   onRefreshMinistries,
@@ -141,7 +129,7 @@ export const SettingsScreen: React.FC<Props> = ({
     useState<NotificationPermission>("default");
   
   const [activeTab, setActiveTab] = useState<
-    "geral" | "admin" | "whatsapp" | "ministries"
+    "geral" | "admin" | "ministries"
   >("geral");
 
   const [isNewMinistryModalOpen, setIsNewMinistryModalOpen] = useState(false);
@@ -389,15 +377,6 @@ export const SettingsScreen: React.FC<Props> = ({
                 className={`py-1.5 px-4 rounded-lg text-sm font-bold transition-colors ${activeTab === "admin" ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
               >
                 Administrador
-              </button>
-              <button
-                role="tab"
-                aria-selected={activeTab === "whatsapp"}
-                aria-controls="panel-whatsapp"
-                onClick={() => setActiveTab("whatsapp")}
-                className={`py-1.5 px-4 rounded-lg text-sm font-bold transition-colors ${activeTab === "whatsapp" ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-white shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-              >
-                WhatsApp
               </button>
               {isOrgAdmin && (
                 <button
@@ -867,209 +846,6 @@ export const SettingsScreen: React.FC<Props> = ({
         </>
       )}
 
-
-
-      {activeTab === "whatsapp" && (
-        <div className="space-y-8 animate-slide-up">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-white dark:bg-zinc-800 rounded-3xl shadow border border-zinc-200 dark:border-zinc-700 gap-4">
-            <div>
-              <h3 className="text-xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                <MessageCircle className="text-[#c9a84c]" />
-                Recurso de WhatsApp da Organização
-              </h3>
-              <p className="text-sm text-zinc-500 mt-1">
-                Integração global de WhatsApp para envios automatizados aos
-                voluntários.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-zinc-500">
-                {organization?.whatsapp_enabled ? "Ativado" : "Desativado"}
-              </span>
-              <button
-                role="switch"
-                aria-checked={organization?.whatsapp_enabled || false}
-                aria-label="Ativar ou desativar WhatsApp"
-                onClick={() => {
-                  if (!isEnterprise) {
-                    addToast(
-                      "Habilite o plano Enterprise para ativar o WhatsApp.",
-                      "error",
-                    );
-                  } else if (onToggleWhatsApp) {
-                    onToggleWhatsApp(!organization?.whatsapp_enabled);
-                  }
-                }}
-                className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#c9a84c]/50 focus:ring-offset-2 dark:focus:ring-offset-zinc-800 ${organization?.whatsapp_enabled ? "bg-[#c9a84c]" : "bg-zinc-300 dark:bg-zinc-600"}`}
-              >
-                <span
-                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow flex-shrink-0 ${organization?.whatsapp_enabled ? "translate-x-6" : "translate-x-1"}`}
-                />
-              </button>
-            </div>
-          </div>
-
-          {!isEnterprise ? (
-            <div className="bg-gradient-to-br from-[#0f1f3d] via-[#152a52] to-black text-white p-8 md:p-12 rounded-[2.5rem] border border-[#c9a84c]/20 shadow-2xl relative overflow-hidden animate-slide-up">
-              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-15 brightness-150 contrast-150 mix-blend-overlay z-0"></div>
-
-              <div className="relative z-10 space-y-6 max-w-2xl">
-                <div className="flex items-center gap-2">
-                  <span className="px-3 py-1 text-[10px] font-black uppercase tracking-widest bg-[#c9a84c]/20 text-[#c9a84c] rounded-full border border-[#c9a84c]/30">
-                    Recurso Premium
-                  </span>
-                  <span className="flex items-center gap-1 text-[10px] font-black uppercase text-[#c9a84c] tracking-widest">
-                    <Crown size={12} fill="currentColor" /> Plano Enterprise
-                  </span>
-                </div>
-
-                <h3 className="text-3xl md:text-4xl font-black text-white leading-tight tracking-tight">
-                  Potencialize a Comunicação do seu Ministério via{" "}
-                  <span className="text-[#c9a84c]">WhatsApp</span>
-                </h3>
-
-                <p className="text-slate-300 text-sm md:text-base leading-relaxed">
-                  Automatize 100% da sua escala conectando as instâncias de
-                  WhatsApp diretamente com seus voluntários. Chega de
-                  esquecimentos ou mensagens manuais exaustivas.
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-                  <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
-                    <span className="p-2 bg-[#c9a84c]/10 text-[#c9a84c] rounded-xl shrink-0">
-                      <MessageCircle size={18} />
-                    </span>
-                    <div>
-                      <h5 className="font-extrabold text-sm text-white">
-                        Lembretes de Escala Automáticos
-                      </h5>
-                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                        Mensagens automáticas lembrando cada voluntário da sua
-                        respectiva escala com dia e horário.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
-                    <span className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl shrink-0">
-                      <Sparkles size={18} />
-                    </span>
-                    <div>
-                      <h5 className="font-extrabold text-sm text-white">
-                        Trocas Facilitadas
-                      </h5>
-                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                        Voluntários abrem solicitações de troca e o sistema
-                        dispara alertas imediatos com link direto.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
-                    <span className="p-2 bg-blue-500/10 text-blue-400 rounded-xl shrink-0">
-                      <CheckCircle2 size={18} />
-                    </span>
-                    <div>
-                      <h5 className="font-extrabold text-sm text-white">
-                        Check-in Instantâneo
-                      </h5>
-                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                        Confirmação de escala em 1 clique direto no link enviado
-                        pelo WhatsApp, sem precisar logar.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
-                    <span className="p-2 bg-purple-500/10 text-purple-400 rounded-xl shrink-0">
-                      <Zap size={18} />
-                    </span>
-                    <div>
-                      <h5 className="font-extrabold text-sm text-white">
-                        Multi-Instâncias
-                      </h5>
-                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                        Configure números dedicados para cada ministério ou use
-                        o número padrão do sistema.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 flex flex-col sm:flex-row items-center gap-4">
-                  <button
-                    onClick={() => {
-                      addToast(
-                        "Entre em contato para ativar o plano Enterprise.",
-                        "info",
-                      );
-                    }}
-                    className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-[#c9a84c] to-[#b2933d] hover:from-[#d8b95c] hover:to-[#c9a84c] text-[#0f1f3d] font-black uppercase tracking-widest text-xs rounded-2xl transition-all shadow-xl shadow-ministral-gold/20 active:scale-95 flex items-center justify-center gap-2 border border-[#c9a84c]/20"
-                  >
-                    <Crown size={16} fill="currentColor" /> Fazer Upgrade para
-                    Enterprise
-                  </button>
-                  <span className="text-[10px] text-slate-400 font-bold tracking-wider uppercase">
-                    Faturamento mensal recorrente. Cancele quando quiser.
-                  </span>
-                </div>
-              </div>
-            </div>
-          ) : organization?.whatsapp_enabled ? (
-            <div className="space-y-6">
-              {/* Toggle para ativar/desativar WhatsApp no ministério atual */}
-              {ministryId &&
-                (() => {
-                  const currentMinistry = ministries?.find(
-                    (m) => m.id === ministryId,
-                  );
-                  const isMinistryWhatsappEnabled =
-                    currentMinistry?.whatsapp_enabled !== false;
-
-                  return (
-                    <MinistryWhatsAppConnect
-                      ministryId={ministryId}
-                      orgId={orgId}
-                      ministryName={currentMinistry?.label || initialTitle}
-                      whatsappEnabled={isMinistryWhatsappEnabled}
-                      onToggle={(enabled) => {
-                        if (onToggleMinistryWhatsApp) {
-                          onToggleMinistryWhatsApp(ministryId, enabled);
-                        }
-                      }}
-                    />
-                  );
-                })()}
-
-              {/* Configurações de mensagens (horário, dias antes, etc.) */}
-              {ministryId &&
-                (() => {
-                  const currentMinistry = ministries?.find(
-                    (m) => m.id === ministryId,
-                  );
-                  const isMinistryWhatsappEnabled =
-                    currentMinistry?.whatsapp_enabled !== false;
-                  if (!isMinistryWhatsappEnabled) return null;
-                  return (
-                    <WhatsAppNotificationSettings
-                      orgId={orgId}
-                      ministryId={ministryId}
-                      ministries={ministries || []}
-                      onShowToast={addToast}
-                    />
-                  );
-                })()}
-            </div>
-          ) : (
-            <div className="p-8 text-center bg-zinc-50 dark:bg-zinc-800/50 rounded-3xl border border-zinc-200 dark:border-zinc-700">
-              <p className="text-zinc-500">
-                Ative o recurso no botão acima para configurar as mensagens de
-                WhatsApp.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Modal de Novo Ministério */}
       {isNewMinistryModalOpen && (

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
-import { 
-    fetchRulesV2, 
-    fetchAssignmentsV2, 
-    fetchMembersV2, 
+import {
+    fetchRulesV2,
+    fetchAssignmentsV2,
+    fetchMembersV2,
     fetchMinistryRoles,
     generateOccurrencesV2,
     saveAssignmentV2,
@@ -16,6 +16,7 @@ import {
     fetchConflictRules,
     fetchGlobalConflictsV2
 } from '../services/scheduleServiceV2';
+import { sendNotificationSQL } from '../services/supabaseService';
 import { 
     Loader2, 
     ChevronLeft, 
@@ -523,17 +524,28 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
                     role,
                     member_id: memberId
                 });
-                
+
+                // Notificar o membro escalado via push + in-app
                 const occurrence = occurrences.find(o => o.date === date && o.ruleId === ruleId);
+                const member = members.find(m => m.id === memberId);
+                const eventTitle = occurrence?.title || role;
+                const dateFormatted = date.split('-').reverse().join('/');
+                sendNotificationSQL(ministryId, orgId, {
+                    title: 'Você foi escalado(a)',
+                    message: `${member?.name || 'Membro'}, você foi escalado(a) para "${eventTitle}" no dia ${dateFormatted}.`,
+                    type: 'info',
+                    actionLink: 'schedule'
+                }).catch(() => {});
+
                 if (occurrence) {
                     const status = getMemberAvailStatus(memberId, date, occurrence.time, availability);
                     if (status === 'unavailable') {
                         addToast('Atencao: membro escalado sem disponibilidade registrada', 'warning');
                     } else {
-                        addToast('Membro escalado', 'success');
+                        addToast('Membro escalado e notificado', 'success');
                     }
                 } else {
-                    addToast('Membro escalado', 'success');
+                    addToast('Membro escalado e notificado', 'success');
                 }
             } else {
                 await removeAssignmentV2(ministryId, orgId, {

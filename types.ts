@@ -16,7 +16,6 @@ export interface Organization {
   // Billing & Access Control
   plan_type?: "trial" | "pro" | "enterprise";
   billing_status?: "active" | "past_due" | "canceled" | "trial" | "trialing";
-  whatsapp_enabled?: boolean;
   trial_ends_at?: string;
   checkout_url?: string;
   access_locked?: boolean;
@@ -33,7 +32,6 @@ export interface MinistryDef {
   organizationId?: string;
   qrCodeUrl?: string;
   socialLinkUrl?: string;
-  whatsapp_enabled?: boolean;
 }
 
 export interface MemberMap {
@@ -80,7 +78,6 @@ export interface MinistrySettings {
   qrCodeUrl?: string;
   socialLinkUrl?: string;
   quickAccessItems?: string[];
-  whatsappCustomMessage?: string; // Mensagem customizada para lembretes WhatsApp
 }
 
 export interface AppNotification {
@@ -145,7 +142,6 @@ export const ALL_TABS = [
   "support-admin",
   // Super Admin exclusive tabs
   "sa-organizations",
-  "sa-whatsapp",
   "sa-telemetry",
   "sa-broadcast",
   "sa-billing",

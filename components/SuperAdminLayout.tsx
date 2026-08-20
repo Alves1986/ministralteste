@@ -25,7 +25,6 @@ interface Props {
 const SA_NAV_ITEMS: SuperAdminNavItem[] = [
     { id: 'sa-organizations', label: 'Organizações',     icon: <Building2 size={20} /> },
     { id: 'sa-users',        label: 'Usuários',          icon: <UserIcon size={20} /> },
-    { id: 'sa-whatsapp',     label: 'WhatsApp Global',   icon: <MessageSquare size={20} /> },
     { id: 'sa-broadcast',    label: 'Comunicados',       icon: <Megaphone size={20} /> },
     { id: 'sa-billing',      label: 'Financeiro',        icon: <CreditCard size={20} /> },
     { id: 'sa-telemetry',    label: 'Telemetria',        icon: <Activity size={20} /> },

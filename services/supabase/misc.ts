@@ -1,28 +1,6 @@
 import { getSupabase, serviceOrgId } from './client';
-import { TeamMemberProfile, SwapRequest, WhatsAppSettings } from '../../types';
-import { notifySuperAdmins } from './notifications';
-
-export const fetchWhatsAppSettings = async (orgId: string): Promise<WhatsAppSettings | null> => {
-    const sb = getSupabase();
-    if (!sb) return null;
-    // Tenta organization_id primeiro; fallback para org_id durante migração
-    const { data } = await sb.from('whatsapp_settings').select('*').eq('organization_id', orgId).maybeSingle();
-    if (data) return data;
-    const { data: fallback } = await sb.from('whatsapp_settings').select('*').eq('org_id', orgId).maybeSingle();
-    return fallback || null;
-};
-
-export const upsertWhatsAppSettings = async (orgId: string, settings: Partial<WhatsAppSettings>) => {
-    const sb = getSupabase();
-    if (!sb) return;
-    const { error } = await sb.from('whatsapp_settings').upsert({
-        organization_id: orgId,
-        enabled: settings.enabled ?? true,
-        send_days_before: settings.send_days_before ?? 0,
-        send_time: settings.send_time ?? '09:00:00'
-    }, { onConflict: 'organization_id' });
-    if (error) throw error;
-};
+import { TeamMemberProfile, SwapRequest } from '../../types';
+import { notifySuperAdmins, sendNotificationSQL } from './notifications';
 
 export const fetchSwapRequests = async (ministryId: string, orgId: string): Promise<SwapRequest[]> => {
     const sb = getSupabase();
@@ -87,13 +65,14 @@ export const createSwapRequestSQL = async (ministryId: string, orgId: string, re
         throw error;
     }
 
-    // Notifica membros com a mesma função via WhatsApp (não-bloqueante)
-    if (inserted?.id) {
-        sb.functions.invoke('whatsapp-swap-notify', {
-            body: { swapRequestId: inserted.id, ministryId, orgId }
-        }).catch(err => {
-            console.warn('[createSwapRequestSQL] whatsapp-swap-notify falhou silenciosamente:', err);
-        });
+    // Notificar o solicitante que seu pedido foi enviado (push + in-app)
+    if (request.requesterId) {
+        sendNotificationSQL(ministryId, orgId, {
+            title: 'Pedido de Troca Enviado',
+            message: `Seu pedido de troca para "${request.eventTitle}" foi enviado. Aguardando voluntário.`,
+            type: 'info',
+            actionLink: 'swaps'
+        }).catch(() => {});
     }
 
     // Notifica admins no app
@@ -265,6 +244,22 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
         }
         
         console.log(`[performSwapSQL] Troca concluída com sucesso para reqId=${reqId}`);
+
+        // Notificar o solicitante original que sua troca foi aceita
+        sendNotificationSQL(ministryId, orgId, {
+            title: 'Troca Aceita!',
+            message: `${takenByName} assumiu sua escala de "${req.event_title}" no dia ${datePart.split('-').reverse().join('/')}.`,
+            type: 'success',
+            actionLink: 'swaps'
+        }).catch(() => {});
+
+        // Notificar admins que a troca foi concluída
+        notifySuperAdmins(
+            'Troca Concluída',
+            `${takenByName} assumiu a escala de ${req.requester_name} para "${req.event_title}".`,
+            'swaps',
+            ministryId
+        ).catch(() => {});
     } else {
         const errorMsg = `[performSwapSQL] Assignment nao encontrado para o swap: ${reqId} (role: ${req.role}, requester_id: ${req.requester_id}, datePart: ${datePart}, timePart: ${timePart})`;
         console.error(errorMsg);
@@ -530,62 +525,4 @@ export const fetchMemberScheduleHistory = async (
     .gte('event_date', cutoff.toISOString().slice(0, 10))
     .order('event_date', { ascending: false });
   return data || [];
-};
-
-// ── WhatsApp Scheduled Notifications (per-event) ──────────────────────
-
-export const scheduleWhatsAppNotification = async (
-  orgId: string,
-  ministryId: string,
-  eventRuleId: string,
-  eventDate: string,
-  eventTitle: string,
-  scheduledAt: string,
-  createdBy?: string
-) => {
-    const sb = getSupabase();
-    if (!sb) return;
-
-    // Remove agendamento anterior para o mesmo evento (se houver)
-    await sb.from('whatsapp_scheduled_notifications')
-        .delete()
-        .eq('organization_id', orgId)
-        .eq('ministry_id', ministryId)
-        .eq('event_rule_id', eventRuleId)
-        .eq('event_date', eventDate);
-
-    const { error } = await sb.from('whatsapp_scheduled_notifications').insert({
-        organization_id: orgId,
-        ministry_id: ministryId,
-        event_rule_id: eventRuleId,
-        event_date: eventDate,
-        event_title: eventTitle,
-        scheduled_at: scheduledAt,
-        status: 'pending',
-        created_by: createdBy || null
-    });
-    if (error) throw error;
-};
-
-export const cancelWhatsAppNotification = async (id: string) => {
-    const sb = getSupabase();
-    if (!sb) return;
-    const { error } = await sb.from('whatsapp_scheduled_notifications')
-        .delete()
-        .eq('id', id);
-    if (error) throw error;
-};
-
-export const fetchScheduledNotifications = async (
-  orgId: string,
-  ministryId: string
-): Promise<{ id: string; event_rule_id: string; event_date: string; event_title: string; scheduled_at: string; status: string }[]> => {
-    const sb = getSupabase();
-    if (!sb) return [];
-    const { data } = await sb.from('whatsapp_scheduled_notifications')
-        .select('*')
-        .eq('organization_id', orgId)
-        .eq('ministry_id', ministryId)
-        .order('scheduled_at', { ascending: true });
-    return data || [];
 };

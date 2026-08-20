@@ -61,7 +61,6 @@ import {
 } from "../services/supabase/support";
 import { useToast } from "./Toast";
 import { getSystemLogo } from "../utils/branding";
-import { GlobalWhatsAppConnect } from "./GlobalWhatsAppConnect";
 
 export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
   activeTab = "sa-organizations",
@@ -607,7 +606,6 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-28">
-      {activeTab === "sa-whatsapp" && <GlobalWhatsAppConnect />}
 
       {activeTab === "sa-organizations" && (
         <>

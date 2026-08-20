@@ -402,7 +402,6 @@ const InnerApp = () => {
           ![
             "sa-organizations",
             "sa-telemetry",
-            "sa-whatsapp",
             "sa-broadcast",
             "sa-billing",
             "sa-users",
@@ -1211,50 +1210,6 @@ const InnerApp = () => {
           }
           return url;
         }}
-        onToggleWhatsApp={async (enabled) => {
-          if (!orgId) return;
-          const sb = getSupabase();
-          if (!sb) return;
-          const { error } = await sb
-            .from("organizations")
-            .update({ whatsapp_enabled: enabled })
-            .eq("id", orgId);
-          if (error) {
-            console.error(error);
-            addToast("Erro ao atualizar o WhatsApp na organização", "error");
-          } else {
-            addToast(
-              `WhatsApp ${enabled ? "ativado" : "desativado"} com sucesso!`,
-              "success",
-            );
-            await refreshSession();
-            refreshData();
-          }
-        }}
-        onToggleMinistryWhatsApp={async (minId, enabled) => {
-          if (!orgId) return;
-          const sb = getSupabase();
-          if (!sb) return;
-          const { error } = await sb
-            .from("organization_ministries")
-            .update({ whatsapp_enabled: enabled })
-            .eq("id", minId)
-            .eq("organization_id", orgId);
-          if (error) {
-            console.error(error);
-            addToast(
-              "Erro ao atualizar o WhatsApp do ministério (A coluna whatsapp_enabled pode não existir no banco).",
-              "error",
-            );
-          } else {
-            addToast(
-              `WhatsApp ${enabled ? "ativado" : "desativado"} para este ministério.`,
-              "success",
-            );
-            await refreshSession();
-            refreshData();
-          }
-        }}
         ministryConfig={{ ...ministryConfig, ...integrations }}
         organization={organization}
         ministries={availableMinistries}
@@ -1525,7 +1480,6 @@ const InnerApp = () => {
             [
               "sa-organizations",
               "sa-telemetry",
-              "sa-whatsapp",
               "sa-broadcast",
               "sa-billing",
               "sa-users",
@@ -1545,7 +1499,6 @@ const InnerApp = () => {
                 [
                   "sa-organizations",
                   "sa-telemetry",
-                  "sa-whatsapp",
                   "sa-broadcast",
                   "sa-billing",
                   "sa-users",
