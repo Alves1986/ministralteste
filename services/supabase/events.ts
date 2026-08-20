@@ -1,0 +1,202 @@
+import { getSupabase } from './client';
+import { notifySuperAdmins } from './notifications';
+import { logAuditAction } from './audit';
+
+
+export const createEventRule = async (orgId: string, ruleData: any) => {
+    const sb = getSupabase();
+    if (!sb) throw new Error("No client");
+    const formattedTime = ruleData.time.length > 5 ? ruleData.time.substring(0, 5) : ruleData.time;
+    const { data, error } = await sb.from('event_rules').insert({
+        organization_id: orgId,
+        ministry_id: ruleData.ministryId,
+        title: ruleData.title,
+        type: ruleData.type,
+        weekday: ruleData.weekday,
+        date: ruleData.date,
+        time: formattedTime,
+        active: true
+    }).select();
+    if (error) throw error;
+
+    // Notify super admins
+    await notifySuperAdmins(
+        'Nova Regra de Agenda',
+        `Uma nova regra "${ruleData.title}" foi criada no sistema.`,
+        'event-rules',
+        ruleData.ministryId
+    );
+
+    // Audit log
+    void logAuditAction({
+        ministryId: ruleData.ministryId,
+        orgId,
+        action: 'event_rule_created',
+        targetType: 'event_rule',
+        targetName: ruleData.title,
+        metadata: { type: ruleData.type, weekday: ruleData.weekday, date: ruleData.date, time: formattedTime },
+    });
+
+    return data;
+};
+
+export const deleteEventRule = async (orgId: string, ruleId: string) => {
+    const sb = getSupabase();
+    if (!sb) return;
+
+    // Obter dados da regra antes de deletar para o log
+    const { data: rule } = await sb.from('event_rules').select('ministry_id, title, organization_id').eq('id', ruleId).single();
+
+    await sb.from('event_rules').update({ active: false }).eq('id', ruleId).eq('organization_id', orgId);
+
+    // Audit log
+    if (rule) {
+        void logAuditAction({
+            ministryId: rule.ministry_id,
+            orgId: rule.organization_id || orgId,
+            action: 'event_rule_deleted',
+            targetType: 'event_rule',
+            targetId: ruleId,
+            targetName: rule.title,
+        });
+    }
+};
+
+export const createMinistryEvent = async (ministryId: string, orgId: string, event: any) => {
+    const formattedTime = event.time.length > 5 ? event.time.substring(0, 5) : event.time;
+    return createEventRule(orgId, {
+        ministryId,
+        title: event.title,
+        type: 'single',
+        date: event.date,
+        time: formattedTime
+    });
+};
+
+export const deleteMinistryEvent = async (ministryId: string, orgId: string, eventIso: string) => {
+    const sb = getSupabase();
+    if (!sb) return;
+    const date = eventIso.split('T')[0];
+    const time = eventIso.split('T')[1];
+    
+    const { data: rules } = await sb.from('event_rules')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId)
+        .eq('date', date)
+        .eq('time', time)
+        .eq('type', 'single');
+        
+    if (rules && rules.length > 0) {
+        await deleteEventRule(orgId, rules[0].id);
+    }
+};
+
+export const updateMinistryEvent = async (
+ ministryId: string,
+ orgId: string,
+ eventId: string | null,
+ oldIso: string,
+ newTitle: string,
+ newIso: string,
+ applyToAll: boolean
+) => {
+ const sb = getSupabase();
+ if (!sb) return;
+ 
+ const oldDate = oldIso.split('T')[0];
+ const oldTime = oldIso.split('T')[1]?.substring(0, 5);
+ const newDate = newIso.split('T')[0];
+ const newTime = newIso.split('T')[1]?.substring(0, 5);
+ 
+ if (!oldDate || !oldTime) return;
+ 
+ let ruleIdToUpdate = eventId ? eventId.split('|')[0] : null;
+
+ if (!ruleIdToUpdate) {
+   // Buscar a regra do evento pelo date + time + org
+   const { data: rule, error: fetchError } = await sb
+     .from('event_rules')
+     .select('id, ministry_id')
+     .eq('organization_id', orgId)
+     .eq('ministry_id', ministryId)
+     .eq('date', oldDate)
+     .eq('time', oldTime)
+     .maybeSingle();
+   
+   if (fetchError) throw fetchError;
+   if (!rule) {
+     console.warn('[updateMinistryEvent] Regra nao encontrada para', oldIso);
+     return;
+   }
+   ruleIdToUpdate = rule.id;
+ }
+ 
+ const { data: currentRule, error: fetchRuleError } = await sb
+   .from('event_rules')
+   .select('id, type')
+   .eq('id', ruleIdToUpdate)
+   .single();
+
+ if (fetchRuleError || !currentRule) throw fetchRuleError || new Error("Regra não encontrada");
+
+ if (!applyToAll && currentRule.type === 'weekly') {
+   // 1. Ocorreu edição apenas nesta data. Vamos criar uma exclusão na regra original
+   const { error: excludeError } = await sb.from('schedule_assignments').insert({
+       organization_id: orgId,
+       ministry_id: ministryId,
+       event_rule_id: ruleIdToUpdate,
+       event_date: oldDate,
+       role: '__EVENT_EXCLUDED__'
+   });
+   
+   if (excludeError) throw excludeError;
+
+   // 2. Criar um novo evento single
+   const { data: newRules, error: newRuleError } = await sb.from('event_rules').insert({
+       organization_id: orgId,
+       ministry_id: ministryId,
+       title: newTitle,
+       type: 'single',
+       date: newDate,
+       time: newTime,
+       active: true
+   }).select();
+
+   if (newRuleError) throw newRuleError;
+
+   const newRuleId = newRules[0].id;
+
+   // 3. Opcional: Migrar os membros já escalados dessa data/regra antiga para a nova
+   const { data: oldAssignments } = await sb.from('schedule_assignments')
+       .select('*')
+       .eq('event_rule_id', ruleIdToUpdate)
+       .eq('event_date', oldDate)
+       .neq('role', '__EVENT_EXCLUDED__');
+
+   if (oldAssignments && oldAssignments.length > 0) {
+       for (const assignment of oldAssignments) {
+           await sb.from('schedule_assignments')
+               .update({
+                   event_rule_id: newRuleId,
+                   event_date: newDate
+               })
+               .eq('id', assignment.id);
+       }
+   }
+
+   return;
+ }
+ 
+ const { error: updateError } = await sb
+   .from('event_rules')
+   .update({
+     title: newTitle,
+     ...(applyToAll ? {} : { date: newDate }),
+     time: newTime
+   })
+   .eq('id', ruleIdToUpdate)
+   .eq('organization_id', orgId);
+ 
+ if (updateError) throw updateError;
+};

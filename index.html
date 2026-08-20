@@ -1,0 +1,39 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#09090b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Ministral" />
+    
+    <title>Ministral</title>
+    
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/branding/favicon-light.png" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="/branding/favicon-dark.png" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" href="/branding/icon-light.png">
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+      (function() {
+        try {
+          var savedMode = localStorage.getItem('themeMode');
+          var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (savedMode === 'dark' || (savedMode === 'system' && systemDark) || (!savedMode && systemDark)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

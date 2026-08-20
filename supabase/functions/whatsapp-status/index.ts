@@ -1,0 +1,151 @@
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sanitizeInstanceName } from "../_shared/evolutionClient.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl        = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error("Variáveis de ambiente não configuradas.");
+    }
+
+    const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL");
+    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY");
+
+    if (!evolutionApiUrl || !evolutionApiKey) {
+      throw new Error("Credenciais da Evolution API (URL e/ou KEY) não configuradas.");
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const { instance_name: raw_instance_name, ministry_id } = body;
+    const instance_name = sanitizeInstanceName(raw_instance_name || "");
+
+    if (!instance_name && !ministry_id) {
+      throw new Error("instance_name ou ministry_id é obrigatório");
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const isGlobal = instance_name === "ministral-global-v2";
+    let targetOrgId: string | undefined;
+    let currentInstanceName = instance_name;
+
+    // ── SEGURANÇA: Validar se a instância pertence à organização e verificar JWT (SEC-02) ──
+    if (!isGlobal) {
+      let query = supabase.from("ministry_whatsapp").select("instance_name, organization_id");
+      
+      if (instance_name) {
+        query = query.eq("instance_name", instance_name);
+      } else {
+        query = query.eq("ministry_id", ministry_id);
+      }
+
+      const { data: mwa, error: mwaErr } = await query.maybeSingle();
+
+      if (mwaErr || !mwa) {
+        throw new Error("Instância WhatsApp não vinculada a nenhum ministério cadastrado.");
+      }
+
+      currentInstanceName = instance_name || mwa.instance_name;
+      targetOrgId = mwa.organization_id;
+    }
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      throw new Error("Authorization header ausente.");
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
+    if (userErr || !user) {
+      console.warn("[whatsapp-status] Unauthorized call or invalid token.");
+      return new Response(JSON.stringify({ error: "Usuário não autenticado." }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    if (!isGlobal) {
+      const { data: profile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("is_admin, is_super_admin, organization_id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileErr || !profile) {
+        throw new Error("Perfil do usuário não encontrado.");
+      }
+
+      const isAuthorized =
+        profile.is_super_admin ||
+        (profile.is_admin && profile.organization_id === targetOrgId);
+
+      if (!isAuthorized) {
+        return new Response(
+          JSON.stringify({ error: "Acesso negado. Administrador requerido para consultar status." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // ── Executa a consulta de status física na Evolution API ──
+    const cleanApiUrl = evolutionApiUrl.trim().replace(/\/+$/, "");
+    const cleanInstance = currentInstanceName ? currentInstanceName.trim().replace(/^\/+|\/+$/g, "") : "";
+    if (!cleanInstance) throw new Error("Instância inválida.");
+    const endpoint = `${cleanApiUrl}/instance/connectionState/${cleanInstance}`;
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        "apikey": evolutionApiKey,
+      },
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Erro ao consultar a Evolution API (${response.status}): ${body}`);
+    }
+
+    const result = await response.json();
+
+    // instance usually returns state -> 'open', 'close', 'connecting'
+    const state = result.instance?.status || result.instance?.state || result.status || result.connectionStatus || result.state;
+
+    if (state === "open") {
+      const phone = result.instance?.owner || result.owner || "";
+
+      if (!isGlobal) {
+        await supabase.from("ministry_whatsapp").update({
+          connected:    true,
+          phone_number: phone,
+          updated_at:   new Date().toISOString(),
+        }).eq("instance_name", currentInstanceName);
+      }
+
+      return new Response(
+        JSON.stringify({ state: "open", phone }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({ state }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (error: any) {
+    console.error("[whatsapp-status] Erro:", error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});

@@ -1,0 +1,1 @@
+"# Gestao-Escala\nProjeto Gestão de Escala OBPC\n"

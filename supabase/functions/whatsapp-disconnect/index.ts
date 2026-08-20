@@ -1,0 +1,152 @@
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sanitizeInstanceName } from "../_shared/evolutionClient.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl        = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error("Variáveis do Supabase não configuradas.");
+    }
+
+    let evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL");
+    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY");
+
+    if (!evolutionApiUrl || !evolutionApiKey) {
+      throw new Error("Credenciais da Evolution API não configuradas.");
+    }
+    
+    // Remove barra final para evitar URLs com barra dupla
+    evolutionApiUrl = evolutionApiUrl.replace(/\/+$/, "");
+
+    const { instance_name: raw_instance_name, ministry_id } = await req.json();
+    const instance_name = sanitizeInstanceName(raw_instance_name || "");
+
+    if (!instance_name || !ministry_id) {
+      throw new Error("instance_name e ministry_id são obrigatórios");
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      throw new Error("Authorization header ausente.");
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
+    if (userErr || !user) {
+      throw new Error("Usuário não autenticado: " + (userErr?.message || "Não encontrado"));
+    }
+
+    const { data: profile, error: profileErr } = await supabase
+      .from("profiles")
+      .select("is_admin, is_super_admin, organization_id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileErr || !profile) {
+      throw new Error("Perfil do usuário não encontrado.");
+    }
+
+    // Validação de segurança específica baseada no escopo
+    if (ministry_id === "global") {
+      if (!profile.is_super_admin) {
+        return new Response(
+          JSON.stringify({ error: "Acesso negado. Apenas super administradores podem desconectar a instância global." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } else {
+      // ── SEGURANÇA: Verificar se o ministério pertence à organização e validar o JWT (SEC-02) ──
+      // Tenta organization_ministries primeiro (padrão atual)
+      let { data: ministry, error: minErr } = await supabase
+        .from("organization_ministries")
+        .select("organization_id")
+        .eq("id", ministry_id)
+        .maybeSingle();
+
+      // Fallback para tabela ministries se necessário
+      if (!ministry) {
+        const { data: fallbackMin } = await supabase
+          .from("ministries")
+          .select("organization_id")
+          .eq("id", ministry_id)
+          .maybeSingle();
+        ministry = fallbackMin;
+      }
+
+      if (!ministry) {
+        throw new Error(`Ministério não encontrado: ${ministry_id}`);
+      }
+
+      const targetOrgId = ministry.organization_id;
+
+      const isAuthorized =
+        profile.is_super_admin ||
+        (profile.is_admin && profile.organization_id === targetOrgId);
+
+      if (!isAuthorized) {
+        return new Response(
+          JSON.stringify({ error: "Acesso negado. Apenas administradores podem desconectar WhatsApp." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // ── Executa a deleção física na Evolution API após aprovação de segurança ──
+    const endpoint = `${evolutionApiUrl}/instance/logout/${instance_name}`; // Usamos logout para tentar revogar a sessão do WhatsApp Web
+    try {
+      const logoutResponse = await fetch(endpoint, {
+        method: "DELETE",
+        headers: { "apikey": evolutionApiKey },
+      });
+      if (!logoutResponse.ok && logoutResponse.status !== 404) {
+        const body = await logoutResponse.text().catch(() => "");
+        console.warn(`[whatsapp-disconnect] Falha silenciosa no logout (${logoutResponse.status}): ${body}. Continuando para exclusão da instância.`);
+      }
+    } catch (e) {
+      console.warn(`[whatsapp-disconnect] Exceção no logout ignorada:`, e);
+    }
+    
+    // Deletamos a instância para garantir que ela limpe dados zumbis
+    const deleteEndpoint = `${evolutionApiUrl}/instance/delete/${instance_name}`;
+    const delRes = await fetch(deleteEndpoint, { method: "DELETE", headers: { "apikey": evolutionApiKey } });
+    if (!delRes.ok && delRes.status !== 404) {
+        const body = await delRes.text().catch(() => "");
+        // Se delete também falhar, aí sim lançamos erro
+        throw new Error(`Evolution API retornou erro ao deletar instância (${delRes.status}): ${body}`);
+    }
+
+    // Atualiza estado no banco apenas se for de um ministério específico
+    if (ministry_id !== "global") {
+      await supabase.from("ministry_whatsapp").update({
+        connected:    false,
+        phone_number: null,
+        updated_at:   new Date().toISOString(),
+      }).eq("ministry_id", ministry_id);
+    }
+
+    return new Response(
+      JSON.stringify({ success: true }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (error: any) {
+    console.error("[whatsapp-disconnect] Erro:", error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
