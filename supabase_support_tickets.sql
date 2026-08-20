@@ -14,29 +14,37 @@ create table public.support_tickets (
 
 alter table public.support_tickets enable row level security;
 
--- Qualquer membro de uma organização pode ver os tickets da organização.
-create policy "Enable read access for all organization members"
+-- Membros da mesma organização podem ver seus tickets
+create policy "Org members can view their org tickets"
 on public.support_tickets for select
 using (
-  auth.uid() is not null
+  organization_id in (
+    select om.organization_id from public.organization_ministries om
+    join public.ministry_members mm on mm.ministry_id = om.id
+    where mm.profile_id = auth.uid()
+  )
+  or public.is_super_admin()
 );
 
--- Os administradores/usuários logados podem criar tickets para suas organizações.
-create policy "Users can insert tickets"
+-- Membros autenticados podem criar tickets para sua organização
+create policy "Users can insert tickets for their org"
 on public.support_tickets for insert
 with check (
-  auth.uid() is not null
+  author_id = auth.uid()
+  or public.is_super_admin()
 );
 
--- Todos os administradores podem atualizar e deletar tickets (ou apenas os super admins podem).
-create policy "Enable update for users"
+-- Autor do ticket ou super admin pode atualizar
+create policy "Author or super admin can update tickets"
 on public.support_tickets for update
 using (
-  auth.uid() is not null
+  author_id = auth.uid()
+  or public.is_super_admin()
 );
 
-create policy "Enable delete for users"
+-- Super admin pode deletar tickets
+create policy "Super admin can delete tickets"
 on public.support_tickets for delete
 using (
-  auth.uid() is not null
+  public.is_super_admin()
 );

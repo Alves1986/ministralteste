@@ -133,7 +133,7 @@ serve(async (req: Request) => {
           ministry_id: a.ministry_id,
           reminder_type: "scale_day",
           reminder_date: today,
-        }).maybeSingle?.();
+        });
       }
     }
 

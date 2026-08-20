@@ -61,6 +61,12 @@ import {
 } from "../services/supabase/support";
 import { useToast } from "./Toast";
 import { getSystemLogo } from "../utils/branding";
+import {
+  fetchAuditLogsByOrg,
+  AuditLogEntry,
+  AUDIT_ACTION_LABELS,
+  AUDIT_ACTION_COLORS,
+} from "../services/supabase/audit";
 
 export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
   activeTab = "sa-organizations",
@@ -89,11 +95,41 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
     setIsLoadingBroadcasts(false);
   };
 
+  // Audit state
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false);
+  const [auditFilterOrg, setAuditFilterOrg] = useState("");
+
+  const loadAuditLogs = async (orgId?: string) => {
+    setIsLoadingAudit(true);
+    try {
+      const sb = getSupabase();
+      if (!sb) return;
+      if (orgId) {
+        const logs = await fetchAuditLogsByOrg(orgId);
+        setAuditLogs(logs);
+      } else {
+        const { data } = await sb
+          .from("ministry_audit_logs")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(200);
+        setAuditLogs((data || []) as AuditLogEntry[]);
+      }
+    } catch {
+      setAuditLogs([]);
+    }
+    setIsLoadingAudit(false);
+  };
+
   useEffect(() => {
     if (activeTab === "sa-broadcast") {
       loadPastBroadcasts();
     }
-  }, [activeTab]);
+    if (activeTab === "sa-audit") {
+      loadAuditLogs(auditFilterOrg || undefined);
+    }
+  }, [activeTab, auditFilterOrg]);
 
   const handleSendBroadcast = async () => {
     if (!broadcastTitle.trim() || !broadcastMessage.trim()) {
@@ -101,32 +137,30 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
       return;
     }
 
-    if (
-      !confirm(
-        "Tem certeza que deseja enviar este comunicado para TODOS os administradores de todas as organizações? Essa ação não pode ser desfeita.",
-      )
-    ) {
-      return;
-    }
-
-    setSendingBroadcast(true);
-    try {
-      const { error } = await notifyAllOrganizationAdmins(
-        broadcastTitle,
-        broadcastMessage,
-        broadcastType,
-      );
-      if (error) throw error;
-      addToast("Comunicado enviado globalmente com sucesso!", "success");
-      setBroadcastTitle("");
-      setBroadcastMessage("");
-      setBroadcastType("info");
-      loadPastBroadcasts();
-    } catch (e: any) {
-      addToast(e.message || "Erro ao enviar comunicado global", "error");
-    } finally {
-      setSendingBroadcast(false);
-    }
+    confirmAction(
+      "Enviar Comunicado",
+      "Tem certeza que deseja enviar este comunicado para TODOS os administradores de todas as organizações? Essa ação não pode ser desfeita.",
+      async () => {
+        setSendingBroadcast(true);
+        try {
+          const { error } = await notifyAllOrganizationAdmins(
+            broadcastTitle,
+            broadcastMessage,
+            broadcastType,
+          );
+          if (error) throw error;
+          addToast("Comunicado enviado globalmente com sucesso!", "success");
+          setBroadcastTitle("");
+          setBroadcastMessage("");
+          setBroadcastType("info");
+          loadPastBroadcasts();
+        } catch (e: any) {
+          addToast(e.message || "Erro ao enviar comunicado global", "error");
+        } finally {
+          setSendingBroadcast(false);
+        }
+      },
+    );
   };
 
   const handleDeleteBroadcast = async (
@@ -135,28 +169,27 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
     message: string,
   ) => {
     e.stopPropagation();
-    if (
-      !confirm(
-        "Tem certeza que deseja excluir as notificações deste comunicado?",
-      )
-    )
-      return;
-
-    try {
-      const { error } = await deleteGlobalBroadcast(title, message);
-      if (error) throw error;
-      addToast("Comunicado excluído com sucesso!", "success");
-      loadPastBroadcasts();
-      if (
-        viewingBroadcast &&
-        viewingBroadcast.title === title &&
-        viewingBroadcast.message === message
-      ) {
-        setViewingBroadcast(null);
-      }
-    } catch (e: any) {
-      addToast(e.message || "Erro ao excluir comunicado", "error");
-    }
+    confirmAction(
+      "Excluir Comunicado",
+      "Tem certeza que deseja excluir as notificações deste comunicado?",
+      async () => {
+        try {
+          const { error } = await deleteGlobalBroadcast(title, message);
+          if (error) throw error;
+          addToast("Comunicado excluído com sucesso!", "success");
+          loadPastBroadcasts();
+          if (
+            viewingBroadcast &&
+            viewingBroadcast.title === title &&
+            viewingBroadcast.message === message
+          ) {
+            setViewingBroadcast(null);
+          }
+        } catch (e: any) {
+          addToast(e.message || "Erro ao excluir comunicado", "error");
+        }
+      },
+    );
   };
 
   // Telemetria detalhada de WhatsApp
@@ -339,15 +372,15 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
 
   const handleDeleteTicket = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (
-      confirm(
-        "Tem certeza que deseja excluir este chamado? Esta ação não pode ser desfeita.",
-      )
-    ) {
-      await deleteSupportTicket(id);
-      if (activeTicket?.id === id) setActiveTicket(null);
-      loadTickets();
-    }
+    confirmAction(
+      "Excluir Chamado",
+      "Tem certeza que deseja excluir este chamado? Esta ação não pode ser desfeita.",
+      async () => {
+        await deleteSupportTicket(id);
+        if (activeTicket?.id === id) setActiveTicket(null);
+        loadTickets();
+      },
+    );
   };
 
   const ticketsOpen = globalTickets.filter((t) => t.status === "open").length;
@@ -1215,7 +1248,6 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
                       <th className="px-6 py-3">Organização</th>
                       <th className="px-6 py-3">Ministério</th>
                       <th className="px-6 py-3 text-center">Instância</th>
-                      <th className="px-6 py-3 text-center">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50 font-medium">
@@ -1249,11 +1281,6 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
                         <td className="px-6 py-3.5 text-center">
                           <span className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
                             {log.instance_name || "Desconhecida"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3.5 text-center">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-black uppercase tracking-widest">
-                            Sucesso
                           </span>
                         </td>
                       </tr>
@@ -1887,45 +1914,92 @@ export const SuperAdminDashboard: React.FC<{ activeTab?: string }> = ({
               </div>
             </div>
 
-            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-              <table className="w-full text-left whitespace-nowrap">
-                <thead>
-                  <tr className="bg-zinc-50 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-800 text-xs uppercase tracking-wider text-zinc-500 font-bold">
-                    <th className="px-6 py-4">Timestamp</th>
-                    <th className="px-6 py-4">Evento</th>
-                    <th className="px-6 py-4">Org / Usuário</th>
-                    <th className="px-6 py-4">Ação / Ip</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                  <tr className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
-                    <td className="px-6 py-4 text-sm text-zinc-500 font-mono text-xs">
-                      Exibição Mock - Audit Log requer Supabase RLS policies
-                      especificas.
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 text-xs font-bold text-zinc-600 dark:text-zinc-400">
-                        auth.login
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 font-medium text-sm text-zinc-900 dark:text-white">
-                      System Admin
-                    </td>
-                    <td className="px-6 py-4 text-sm font-mono text-zinc-500">
-                      192.168.1.1
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <div className="p-8 text-center bg-zinc-50 dark:bg-zinc-800/30">
-                <ShieldAlert size={32} className="text-zinc-400 mx-auto mb-3" />
-                <p className="text-zinc-500 font-medium max-w-md mx-auto">
-                  Para armazenamento forense persistente dos logs, os webhooks
-                  do Supabase precisam estar direcionados para um endpoint
-                  dedicado do Applet (ou serviço de Log).
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
+              <select
+                value={auditFilterOrg}
+                onChange={(e) => setAuditFilterOrg(e.target.value)}
+                className="px-3 py-2 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-xl text-sm dark:text-white"
+              >
+                <option value="">Todas as organizações</option>
+                {organizations.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => loadAuditLogs(auditFilterOrg || undefined)}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-bold text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+              >
+                <RefreshCw size={14} /> Atualizar
+              </button>
+            </div>
+
+            {isLoadingAudit ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 size={24} className="animate-spin text-zinc-400" />
+              </div>
+            ) : auditLogs.length === 0 ? (
+              <div className="p-8 text-center bg-zinc-50 dark:bg-zinc-800/30 rounded-2xl">
+                <ShieldCheck size={32} className="text-zinc-400 mx-auto mb-3" />
+                <p className="text-zinc-500 font-medium">
+                  Nenhum log de auditoria encontrado.
                 </p>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                <table className="w-full text-left whitespace-nowrap">
+                  <thead>
+                    <tr className="bg-zinc-50 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-800 text-xs uppercase tracking-wider text-zinc-500 font-bold">
+                      <th className="px-6 py-4">Data/Hora</th>
+                      <th className="px-6 py-4">Ação</th>
+                      <th className="px-6 py-4">Ator</th>
+                      <th className="px-6 py-4">Alvo</th>
+                      <th className="px-6 py-4">Detalhes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    {auditLogs.map((log) => (
+                      <tr
+                        key={log.id}
+                        className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+                      >
+                        <td className="px-6 py-3.5 text-sm text-zinc-500 font-mono">
+                          {new Date(log.created_at).toLocaleString("pt-BR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </td>
+                        <td className="px-6 py-3.5">
+                          <span
+                            className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold ${
+                              AUDIT_ACTION_COLORS[log.action] ||
+                              "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                            }`}
+                          >
+                            {AUDIT_ACTION_LABELS[log.action] || log.action}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3.5 font-medium text-sm text-zinc-900 dark:text-white">
+                          {log.actor_name}
+                        </td>
+                        <td className="px-6 py-3.5 text-sm text-zinc-600 dark:text-zinc-400">
+                          {log.target_name || log.target_type || "—"}
+                        </td>
+                        <td className="px-6 py-3.5 text-sm font-mono text-zinc-500 max-w-[200px] truncate">
+                          {log.ministry_id
+                            ? `Ministério: ${log.ministry_id.slice(0, 8)}...`
+                            : "Global"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
