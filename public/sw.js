@@ -2,6 +2,7 @@
 // Este arquivo DEVE ficar em /public/sw.js para ser servido na raiz do domínio
 
 const CACHE_NAME = 'ministral-v1';
+self.__WB_MANIFEST = [];
 
 // =============================================
 // EVENTO: push (recebe notificação do servidor)

@@ -20,12 +20,11 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
-        // injectManifest: usa src/sw.js como base (com o handler de PUSH).
-        // generateSW gerava um SW do zero SEM o listener 'push' — as notificações
-        // chegavam ao dispositivo mas nunca eram exibidas (bug reportado).
+        // injectManifest: usa public/sw.js como base (com o handler de PUSH).
         strategies: 'injectManifest',
-        srcDir: 'src',
+        srcDir: 'public',
         filename: 'sw.js',
+        outDir: 'dist',
         registerType: 'autoUpdate',
         injectRegister: 'auto',
         manifest: false, // Use existing manifest.json in root
