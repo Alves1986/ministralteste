@@ -185,9 +185,22 @@
 - [ ] **[FEAT]** Notificações de swap aprovado — notificar voluntário via WhatsApp quando troca for aceita
 
 ## Contexto da última sessão (atualizar ao fechar)
-- **Último trabalho**: Implementado o sistema de Logs de Auditoria para as Organizações (`ministry_audit_logs`) com aba dedicada para os admins. Adicionada tela e fluxo para Gestão Autônoma de Ministérios (`create_org_ministry` RPC) em `SettingsScreen`, permitindo que os Criadores gerenciem (criação e limite de planos) sem recorrer ao SuperAdmin. Corrigido problema de re-renderização (`useMemo`) que ocultava a aba na primeira carga do perfil.
-- **O que ficou pendente**: Execução do script RPC SQL pelo usuário, se ainda não o fez, além de pendências prévias de telemetria (zerada), widget que sumiu, erro na troca de escala e integração do botão Google Agenda.
-- **Próximo passo**: Focar no bug reportado sobre a Troca de Escala e diagnosticar por que a integração com o Google Agenda parou de responder no perfil.
+- **Último trabalho**: Upgrade de segurança completo para SaaS (21/08/2026). Corrigidas 29+ vulnerabilidades de segurança identificadas no scan GitGuard:
+  - CRÍTICO: JWT real no `.env.example` → placeholder
+  - CRÍTICO: Firebase API key hardcoded → placeholder
+  - CRÍTICO: Timing attacks em 6 Edge Functions → `safeCompare()` (tempo constante)
+  - HIGH: `Math.random()` em tokens/IDs → `crypto.randomUUID()`
+  - HIGH: XSS via `innerHTML` → `textContent`
+  - HIGH: URL path injection (`instance_name`) → `sanitizeInstanceName()`
+  - MEDIUM: Error disclosure em 9 endpoints → mensagens sanitizadas
+  - MEDIUM: Regex email ReDoS → regex reescrita
+  - MEDIUM: URL injection `lat`/`lon` → sanitizados
+  - MEDIUM: `allowBackup="true"` Android → `false`
+  - Novo: `SECURITY.md` com instruções de rotação de chaves
+  - Novo: `_shared/safeCompare.ts` helper de comparação segura
+  - Git inicializado e commit feito: `4db04c9`
+- **O que ficou pendente**: Rotação manual de chaves no Supabase Dashboard (anon key, CHECKIN_SECRET_KEY). O SECURITY.md instrui o usuário passo a passo.
+- **Próximo passo**: Fazer deploy com as novas chaves rotacionadas. Verificar se todas as migrations foram executadas no Supabase.
 
 ---
 
