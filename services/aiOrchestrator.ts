@@ -56,6 +56,26 @@ export const DEFAULT_MODEL = AI_MODELS[0].id;
 
 import { buildSchedulePrompt, extractAssignments } from './aiScheduleUtils';
 
+// ─── Telemetry: log de uso de AI ────────────────────────────────────────
+async function logAIUsage(entry: {
+  organization_id?: string;
+  ministry_id?: string;
+  task_type: string;
+  model_used: string;
+  status: 'success' | 'error' | 'fallback';
+  duration_ms?: number;
+  error_message?: string;
+}) {
+  try {
+    const { getSupabase } = await import('./supabase/client');
+    const sb = getSupabase();
+    if (!sb) return;
+    await sb.from('ai_usage_logs').insert(entry);
+  } catch {
+    // falha silenciosa — telemetria nunca bloqueia a AI
+  }
+}
+
 const GLOBAL_PERSONALITY = `
 Você é um especialista em gestão de ministérios e organização de equipes.
 Seu foco é: organização, equilíbrio, clareza e decisões práticas.
@@ -271,7 +291,13 @@ async function callWithFallback(prompt: string, taskType: AI_TASKS, preferredMod
 }
 
 export async function runAI(taskType: AI_TASKS, context: AIContext | any, payload?: any, preferredModel?: string): Promise<any> {
-  if (typeof window !== 'undefined') {
+  const startTime = Date.now();
+  let status: 'success' | 'error' | 'fallback' = 'success';
+  let errorMsg: string | undefined;
+  let modelUsed = preferredModel || 'default';
+
+  try {
+    if (typeof window !== 'undefined') {
     // Estamos no navegador: chamar nosso backend ao invés de ligar diretamente (esconde API Key)
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     try {
