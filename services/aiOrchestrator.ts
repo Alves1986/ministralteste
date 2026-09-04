@@ -366,6 +366,19 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
     console.error(`[AIOrchestrator] Falha para task ${taskType}:`, error);
     throw new Error(`Erro na IA (${taskType}): ${error.message || 'Erro desconhecido'}`);
   }
+  } catch (error: any) {
+    status = 'error';
+    errorMsg = error.message;
+    throw error;
+  } finally {
+    logAIUsage({
+      task_type: taskType,
+      model_used: modelUsed,
+      status,
+      duration_ms: Date.now() - startTime,
+      error_message: errorMsg
+    });
+  }
 }
 
 function parseAIResponse(content: string, taskType: AI_TASKS): any {
