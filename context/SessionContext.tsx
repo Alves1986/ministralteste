@@ -162,13 +162,15 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     birthDate: profile.birth_date,
                 });
 
-                const adminUser = createAdminUser(profile, sessionUser, orgId, activeMinistry, allowedMinistries, ministry_functions);
-                if (isMountedRef.current) {
+                setTimeout(() => {
+                    if (!isMountedRef.current) return;
+                    
+                    const adminUser = createAdminUser(profile, sessionUser, orgId, activeMinistry, allowedMinistries, ministry_functions);
                     setUser(adminUser);
                     setOrganization(orgDetails);
                     setStatus('ready');
-                }
-                isProcessingRef.current = false;
+                    isProcessingRef.current = false;
+                }, 0);
                 return;
             }
             // ────────────────────────────────────────────────────────────────────────────
