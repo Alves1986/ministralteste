@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { RefreshCcw, User, Calendar, ArrowRight, CheckCircle2, Clock, Info, FilterX, XCircle, Trash2 } from 'lucide-react';
-import { SwapRequest, User as UserType, ScheduleMap } from '../types';
+import { RefreshCcw, User, Calendar, ArrowRight, CheckCircle2, Clock, Info, FilterX, XCircle, Trash2, ShieldCheck } from 'lucide-react';
+import { SwapRequest, User as UserType, ScheduleMap, AttendanceMap } from '../types';
 import { useToast } from './Toast';
 
 interface Props {
@@ -13,10 +13,11 @@ interface Props {
   onCreateRequest: (role: string, iso: string, title: string) => Promise<void>;
   onAcceptRequest: (reqId: string) => void;
   onCancelRequest?: (reqId: string) => void;
+  attendance?: AttendanceMap;
 }
 
 export const SwapRequestsScreen: React.FC<Props> = ({ 
-    schedule, currentUser, requests, visibleEvents, currentMonth, onCreateRequest, onAcceptRequest, onCancelRequest 
+    schedule, currentUser, requests, visibleEvents, currentMonth, onCreateRequest, onAcceptRequest, onCancelRequest, attendance = {} 
 }) => {
   const [activeTab, setActiveTab] = useState<'mine' | 'wall'>('wall');
   const { confirmAction } = useToast();
@@ -127,25 +128,34 @@ export const SwapRequestsScreen: React.FC<Props> = ({
                                 
                                 <div className="space-y-3">
                                     {item.roles.map(role => {
+                                        const attendanceKey = `${item.event.id}|${item.event.iso}|${role}`;
+                                        const hasAttendance = attendance[attendanceKey] === true;
                                         return (
                                             <div key={role} className="flex flex-col gap-2 p-3 rounded-xl border transition-all bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-700/50">
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-sm font-bold text-zinc-700 dark:text-zinc-200">{role}</span>
                                                 </div>
                                                 
-                                                <button 
-                                                    onClick={async () => {
-                                                        try {
-                                                            await onCreateRequest(role, item.event.iso, item.event.title);
-                                                            setActiveTab('wall');
-                                                        } catch (e) {
-                                                            // Error is handled in App.tsx
-                                                        }
-                                                    }}
-                                                    className="w-full text-xs font-bold text-white bg-secondary hover:bg-secondaryHover py-2 rounded-lg transition-colors shadow-sm shadow-secondary/20 active:scale-95"
-                                                >
-                                                    Solicitar Troca
-                                                </button>
+                                                {hasAttendance ? (
+                                                    <div className="flex items-center gap-2 py-2 px-3 bg-secondary/10 dark:bg-secondary/5 rounded-lg border border-secondary/20 dark:border-secondary/30">
+                                                        <ShieldCheck size={14} className="text-secondary dark:text-white shrink-0" />
+                                                        <span className="text-xs font-bold text-secondary dark:text-white">Presença registrada pela liderança</span>
+                                                    </div>
+                                                ) : (
+                                                    <button 
+                                                        onClick={async () => {
+                                                            try {
+                                                                await onCreateRequest(role, item.event.iso, item.event.title);
+                                                                setActiveTab('wall');
+                                                            } catch (e) {
+                                                                // Error is handled in App.tsx
+                                                            }
+                                                        }}
+                                                        className="w-full text-xs font-bold text-white bg-secondary hover:bg-secondaryHover py-2 rounded-lg transition-colors shadow-sm shadow-secondary/20 active:scale-95"
+                                                    >
+                                                        Solicitar Troca
+                                                    </button>
+                                                )}
                                             </div>
                                         )
                                     })}

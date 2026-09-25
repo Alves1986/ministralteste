@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { useToast } from './Toast';
 import { generateAISchedule } from '../services/aiScheduleService';
+import { validateAssignment } from '../services/aiScheduleUtils';
 
 // --- COMPONENTES AUXILIARES ---
 import { ScheduleCell, getMemberAvailStatus, Avatar, isConflict } from './ScheduleCell';
@@ -351,8 +352,18 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             // Garantir que todos tem .slice
             const safeAi = Array.isArray(aiAssignments) ? aiAssignments.filter(a => a && typeof a.event_date === 'string' && a.role && a.event_rule_id) : [];
             
+            // Validar sugestões contra regras de negócio absolutas
+            const validAi = safeAi.filter((a: any) => {
+                const err = validateAssignment(a, input);
+                if (err) {
+                    console.warn(`Sugestão da IA rejeitada: [${a.event_date}] ${a.role} -> ${a.member_id}. Motivo: ${err.message}`);
+                    return false;
+                }
+                return true;
+            });
+
             // Filtrar apenas o que NÃO está preenchido
-            const newAssignments = safeAi.filter((ai: any) => {
+            const newAssignments = validAi.filter((ai: any) => {
                 const alreadyExists = assignments.some(a => 
                     a.event_date && typeof a.event_date === 'string' &&
                     a.event_date.slice(0, 10) === ai.event_date.slice(0, 10) && 
@@ -445,11 +456,21 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMo
             const safeAi = Array.isArray(aiAssignments)
                 ? aiAssignments.filter((a: any) => a && typeof a.event_date === 'string' && a.role && a.event_rule_id)
                 : [];
-            if (safeAi.length === 0) {
-                addToast('A escala já está bem equilibrada! Nenhuma troca necessária.', 'info');
+                
+            const validAi = safeAi.filter((a: any) => {
+                const err = validateAssignment(a, input);
+                if (err) {
+                    console.warn(`Sugestão da IA (Reequilíbrio) rejeitada: [${a.event_date}] ${a.role} -> ${a.member_id}. Motivo: ${err.message}`);
+                    return false;
+                }
+                return true;
+            });
+
+            if (validAi.length === 0) {
+                addToast('A escala já está bem equilibrada ou não foi possível sugerir trocas seguras.', 'info');
                 return;
             }
-            setAiSuggestions(safeAi);
+            setAiSuggestions(validAi);
             setIsRebalanceMode(true);
             setShowReviewAI(true);
         } catch (error: any) {

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { CustomEvent, AvailabilityMap, Role, TeamMemberProfile } from '../types';
-import { X, Plus, Trash2, Calendar, ShieldAlert, Undo2, ArrowUp, ArrowDown, GripVertical, User, Check, Briefcase, Hash, History, Link, Copy, Loader2, Mail, MessageCircle } from 'lucide-react';
+import { X, Plus, Trash2, Calendar, ShieldAlert, Undo2, ArrowUp, ArrowDown, GripVertical, User as UserIcon, Check, Briefcase, Hash, History, Link, Copy, Loader2, Mail, MessageCircle, UserPlus } from 'lucide-react';
 import { useToast } from './Toast';
 import { createInviteToken } from '../services/supabaseService';
 import { useAppStore } from '../store/appStore';
@@ -472,9 +472,9 @@ export const RolesModal = ({ isOpen, onClose, roles, onUpdate, ministryName = ""
 };
 
 // --- Edit Member Modal ---
-export const EditMemberModal = ({ isOpen, onClose, member, availableRoles, onSave }: { 
-    isOpen: boolean; 
-    onClose: () => void; 
+export const EditMemberModal = ({ isOpen, onClose, member, availableRoles, onSave }: {
+    isOpen: boolean;
+    onClose: () => void;
     member: TeamMemberProfile | null;
     availableRoles: string[];
     onSave: (id: string, data: { name: string, whatsapp: string, ministry_functions: string[] }) => void;
@@ -502,10 +502,10 @@ export const EditMemberModal = ({ isOpen, onClose, member, availableRoles, onSav
 
     const handleSave = () => {
         if (member) {
-            // Validação WhatsApp: (DD) XXXXX-XXXX
+            // Validacao WhatsApp: (DD) XXXXX-XXXX
             const whatsappRegex = /^\(\d{2}\) \d{5}-\d{4}$/;
             if (whatsapp && !whatsappRegex.test(whatsapp)) {
-                addToast("Formato de WhatsApp inválido. Use (DD) XXXXX-XXXX", "error");
+                addToast("Formato de WhatsApp invalido. Use (DD) XXXXX-XXXX", "error");
                 return;
             }
             onSave(member.id, { name, whatsapp, ministry_functions: selectedRoles });
@@ -519,17 +519,17 @@ export const EditMemberModal = ({ isOpen, onClose, member, availableRoles, onSav
         <Modal isOpen={isOpen} onClose={onClose} title="Editar Membro">
             <div className="space-y-5">
                 <div>
-                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5 ml-1 flex items-center gap-1"><User size={12}/> Nome Completo</label>
-                    <input 
-                        value={name} 
-                        onChange={e => setName(e.target.value)} 
+                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5 ml-1 flex items-center gap-1"><UserIcon size={12}/> Nome Completo</label>
+                    <input
+                        value={name}
+                        onChange={e => setName(e.target.value)}
                         className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-ministral-500"
                     />
                 </div>
                 <div>
                     <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5 ml-1 flex items-center gap-1"><MessageCircle size={12}/> WhatsApp</label>
-                    <input 
-                        value={whatsapp} 
+                    <input
+                        value={whatsapp}
                         onChange={e => {
                             const val = e.target.value.replace(/\D/g, '');
                             if (val.length <= 11) {
@@ -538,13 +538,13 @@ export const EditMemberModal = ({ isOpen, onClose, member, availableRoles, onSav
                                 if (val.length > 7) formatted = `(${val.slice(0, 2)}) ${val.slice(2, 7)}-${val.slice(7)}`;
                                 setWhatsapp(formatted);
                             }
-                        }} 
+                        }}
                         placeholder="(00) 00000-0000"
                         className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-ministral-500"
                     />
                 </div>
                 <div>
-                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-2 ml-1 flex items-center gap-1"><Briefcase size={12}/> Funções (Cargos)</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-2 ml-1 flex items-center gap-1"><Briefcase size={12}/> Funcoes (Cargos)</label>
                     <div className="flex flex-wrap gap-2">
                         {availableRoles.map(role => {
                             const isSelected = selectedRoles.includes(role);
@@ -553,8 +553,8 @@ export const EditMemberModal = ({ isOpen, onClose, member, availableRoles, onSav
                                     key={role}
                                     onClick={() => toggleRole(role)}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1 ${
-                                        isSelected 
-                                        ? 'bg-ministral-500 text-white border-ministral-500 shadow-md' 
+                                        isSelected
+                                        ? 'bg-ministral-500 text-white border-ministral-500 shadow-md'
                                         : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
                                     }`}
                                 >
@@ -565,13 +565,162 @@ export const EditMemberModal = ({ isOpen, onClose, member, availableRoles, onSav
                         })}
                     </div>
                 </div>
-                
+
                 <div className="pt-2">
-                    <button 
-                        onClick={handleSave} 
+                    <button
+                        onClick={handleSave}
                         className="w-full bg-ministral-500 hover:bg-ministral-600 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-ministral-500/20 active:scale-95"
                     >
-                        Salvar Alterações
+                        Salvar Alteracoes
+                    </button>
+                </div>
+            </div>
+        </Modal>
+    );
+};
+
+// --- Add Manual Member Modal ---
+export const AddMemberModal = ({ isOpen, onClose, ministryId, orgId, availableRoles, currentUser, onAdd }: {
+    isOpen: boolean;
+    onClose: () => void;
+    ministryId: string;
+    orgId: string;
+    availableRoles: string[];
+    currentUser: any;
+    onAdd: (data: { name: string; whatsapp: string; birthDate?: string; ministry_functions: string[] }) => Promise<void>;
+}) => {
+    const [name, setName] = useState("");
+    const [whatsapp, setWhatsapp] = useState("");
+    const [birthDate, setBirthDate] = useState("");
+    const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+    const [loading, setLoading] = useState(false);
+    const { addToast } = useToast();
+
+    // Reset forms when modal opens or member changes
+    useEffect(() => {
+        if (isOpen) {
+            setName("");
+            setWhatsapp("");
+            setBirthDate("");
+            setSelectedRoles([]);
+        }
+    }, [isOpen]);
+
+    const toggleRole = (role: string) => {
+        if (selectedRoles.includes(role)) {
+            setSelectedRoles(selectedRoles.filter(r => r !== role));
+        } else {
+            setSelectedRoles([...selectedRoles, role]);
+        }
+    };
+
+    const handleAdd = async () => {
+        if (!name.trim()) {
+            addToast("O nome e obrigatorio.", "error");
+            return;
+        }
+
+        const whatsappRegex = /^\(\d{2}\) \d{5}-\d{4}$/;
+        if (whatsapp && !whatsappRegex.test(whatsapp)) {
+            addToast("Formato de WhatsApp invalido. Use (DD) XXXXX-XXXX", "error");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await onAdd({
+                name: name.trim(),
+                whatsapp: whatsapp.trim(),
+                birthDate: birthDate || undefined,
+                ministry_functions: selectedRoles,
+            });
+            onClose();
+        } catch (err: any) {
+            addToast("Erro ao adicionar membro: " + (err.message || "Tente novamente."), "error");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Adicionar Membro Manual">
+            <div className="space-y-5">
+                <div className="bg-ministral-50 dark:bg-ministral-900/20 p-3 rounded-lg border border-ministral-200 dark:border-ministral-800/30 text-xs text-ministral-700 dark:text-ministral-300 flex gap-2">
+                    <UserIcon size={16} className="shrink-0" />
+                    <p>Esse membro nao precisa ter conta de login. Ele aparece na escala, disponibilidade e demais funcionalidades como qualquer outro integrante.</p>
+                </div>
+
+                <div>
+                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5 ml-1 flex items-center gap-1"><UserIcon size={12}/> Nome Completo</label>
+                    <input
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        placeholder="Nome do membro"
+                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-ministral-500"
+                    />
+                </div>
+
+                <div>
+                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5 ml-1 flex items-center gap-1"><MessageCircle size={12}/> WhatsApp</label>
+                    <input
+                        value={whatsapp}
+                        onChange={e => {
+                            const val = e.target.value.replace(/\D/g, '');
+                            if (val.length <= 11) {
+                                let formatted = val;
+                                if (val.length > 2) formatted = `(${val.slice(0, 2)}) ${val.slice(2)}`;
+                                if (val.length > 7) formatted = `(${val.slice(0, 2)}) ${val.slice(2, 7)}-${val.slice(7)}`;
+                                setWhatsapp(formatted);
+                            }
+                        }}
+                        placeholder="(00) 00000-0000"
+                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-ministral-500"
+                    />
+                </div>
+
+                <div>
+                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5 ml-1 flex items-center gap-1">Data de Nascimento</label>
+                    <input
+                        type="date"
+                        value={birthDate}
+                        onChange={e => setBirthDate(e.target.value)}
+                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-ministral-500"
+                    />
+                </div>
+
+                <div>
+                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-2 ml-1 flex items-center gap-1"><Briefcase size={12}/> Funcoes (Cargos)</label>
+                    <div className="flex flex-wrap gap-2">
+                        {availableRoles.map(role => {
+                            const isSelected = selectedRoles.includes(role);
+                            return (
+                                <button
+                                    key={role}
+                                    onClick={() => toggleRole(role)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1 ${
+                                        isSelected
+                                        ? 'bg-ministral-500 text-white border-ministral-500 shadow-md'
+                                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
+                                    }`}
+                                >
+                                    {role}
+                                    {isSelected && <Check size={12} />}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="pt-2">
+                    <button
+                        onClick={handleAdd}
+                        disabled={loading}
+                        className="w-full bg-ministral-500 hover:bg-ministral-600 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-ministral-500/20 active:scale-95 disabled:opacity-50"
+                    >
+                        {loading ? <Loader2 className="animate-spin" size={18} /> : <UserPlus size={18} />}
+                        {loading ? "Adicionando..." : "Adicionar Membro"}
                     </button>
                 </div>
             </div>

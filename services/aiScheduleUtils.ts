@@ -175,3 +175,157 @@ export function extractAssignments(text: string): Array<{
       member_id: String(a.member_id),
     }));
 }
+
+// ─── Validador compartilhado de atribuições ────────────────────────────
+
+export type ValidationError = {
+  type:
+    | "UNKNOWN_EVENT"
+    | "INVALID_ROLE"
+    | "INELIGIBLE_MEMBER"
+    | "UNAVAILABLE"
+    | "ROLE_EXCLUDED"
+    | "DUPLICATE"
+    | "SLOT_FILLED";
+  message: string;
+};
+
+/**
+ * Valida uma única atribuição contra o contexto da escala.
+ * Retorna null se válida, ou um ValidationError se inválida.
+ */
+export function validateAssignment(
+  assignment: {
+    event_rule_id: string;
+    event_date: string;
+    role: string;
+    member_id: string;
+  },
+  input: ScheduleInput,
+): ValidationError | null {
+  const { event_rule_id, event_date, role, member_id } = assignment;
+
+  // 1. Evento inexistente
+  const occurrenceExists = (input.occurrences || []).some(
+    (o) => o.ruleId === event_rule_id && o.date === event_date,
+  );
+  if (!occurrenceExists) {
+    return {
+      type: "UNKNOWN_EVENT",
+      message: `Evento não encontrado: regra ${event_rule_id} em ${event_date}.`,
+    };
+  }
+
+  // 2. Função inválida (não existe no ministério)
+  if (!(input.roles || []).includes(role)) {
+    return {
+      type: "INVALID_ROLE",
+      message: `Função "${role}" não existe no ministério.`,
+    };
+  }
+
+  // 3. Membro inelegível (não encontrado na lista)
+  const member = (input.members || []).find((m) => m.id === member_id);
+  if (!member) {
+    return {
+      type: "INELIGIBLE_MEMBER",
+      message: `Membro ${member_id} não encontrado na lista de membros.`,
+    };
+  }
+
+  // 4. Membro não tem a função atribuída
+  if (member.functions && member.functions.length > 0 && !member.functions.includes(role)) {
+    return {
+      type: "INELIGIBLE_MEMBER",
+      message: `${member.name} não possui a função "${role}".`,
+    };
+  }
+
+  // 5. Indisponibilidade
+  const avail = input.availability?.[member_id];
+  if (avail) {
+    let availDates: string[] = [];
+    if (Array.isArray(avail)) {
+      availDates = avail.map((d) => String(d));
+    } else if (typeof avail === "object") {
+      availDates = Object.entries(avail as Record<string, unknown>)
+        .filter(([, v]) => String(v).toLowerCase() !== "unavailable")
+        .map(([d]) => d);
+    }
+    // Se há dados de disponibilidade e a data não está incluída
+    if (availDates.length > 0) {
+      const isAvailable = availDates.some(
+        (d) => d === event_date || d.startsWith(event_date),
+      );
+      if (!isAvailable) {
+        return {
+          type: "UNAVAILABLE",
+          message: `${member.name} não está disponível em ${event_date}.`,
+        };
+      }
+    }
+  }
+
+  // 6. Exclusão de função por evento
+  if (input.eventRoleExcludes?.[event_rule_id]?.includes(role)) {
+    return {
+      type: "ROLE_EXCLUDED",
+      message: `Função "${role}" está excluída para o evento (regra ${event_rule_id}).`,
+    };
+  }
+
+  // 7. Duplicidade (mesmo membro, mesma data, mesma função, mesmo evento)
+  const isDuplicate = (input.existingAssignments || []).some(
+    (a) =>
+      a.event_rule_id === event_rule_id &&
+      a.event_date === event_date &&
+      a.role === role &&
+      a.member_id === member_id,
+  );
+  if (isDuplicate) {
+    return {
+      type: "DUPLICATE",
+      message: `${member.name} já está escalado para "${role}" neste evento.`,
+    };
+  }
+
+  // 8. Vaga já preenchida (outro membro já ocupa essa posição)
+  const slotFilled = (input.existingAssignments || []).some(
+    (a) =>
+      a.event_rule_id === event_rule_id &&
+      a.event_date === event_date &&
+      a.role === role &&
+      a.member_id &&
+      a.member_id !== member_id,
+  );
+  if (slotFilled) {
+    return {
+      type: "SLOT_FILLED",
+      message: `A vaga "${role}" em ${event_date} já está preenchida por outro membro.`,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Valida um array de atribuições e retorna os resultados.
+ * Cada resultado contém a atribuição original e, se inválida, o erro.
+ */
+export function validateAssignments(
+  assignments: Array<{
+    event_rule_id: string;
+    event_date: string;
+    role: string;
+    member_id: string;
+  }>,
+  input: ScheduleInput,
+): Array<{
+  assignment: (typeof assignments)[0];
+  error: ValidationError | null;
+}> {
+  return assignments.map((assignment) => ({
+    assignment,
+    error: validateAssignment(assignment, input),
+  }));
+}

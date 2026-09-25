@@ -1,5 +1,6 @@
-import { getSupabase } from "./client";
+import { getSupabase, serviceOrgId } from "./client";
 import { notifySuperAdmins } from "./notifications";
+import { logAuditAction } from "./audit";
 
 export const fetchOrganizationsWithStats = async () => {
   const sb = getSupabase();
@@ -345,4 +346,92 @@ export const deleteOrganizationMinistry = async (
   return error
     ? { success: false, message: error.message }
     : { success: true, message: "Removido" };
+};
+
+export interface ManualMemberInput {
+  name: string;
+  whatsapp: string;
+  birthDate?: string;
+  ministry_functions?: string[];
+}
+
+export const addManualMember = async (
+  ministryId: string,
+  orgId: string,
+  input: ManualMemberInput,
+  createdByAdminName: string,
+): Promise<{ success: boolean; message?: string; memberId?: string }> => {
+  const sb = getSupabase();
+  if (!sb) return { success: false, message: "Sem conexão com banco de dados" };
+
+  if (!input.name.trim()) {
+    return { success: false, message: "Nome é obrigatório." };
+  }
+
+  // Gera um ID próprio para o membro manual (não vinculado ao Auth do Supabase)
+  let memberId: string;
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    memberId = crypto.randomUUID();
+  } else if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    const array = new Uint8Array(16);
+    crypto.getRandomValues(array);
+    memberId = Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("");
+  } else {
+    memberId = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  }
+
+  // 1. Cria um perfil mínimo no `profiles` (sem auth) para que o membro
+  //    apareça normalmente em `fetchMinistryMembers` e nas demais telas,
+  //    sem exigir login.
+  const { error: profileError } = await sb
+    .from("profiles")
+    .upsert(
+      {
+        id: memberId,
+        name: input.name.trim(),
+        email: `manual_${memberId}@ministral.local`,
+        whatsapp: input.whatsapp.trim() || null,
+        birth_date: input.birthDate || null,
+        organization_id: orgId,
+        is_admin: false,
+        is_super_admin: false,
+        allowed_ministries: [ministryId],
+      },
+      { onConflict: "id" },
+    );
+
+  // 2. Vincular ao ministério
+  const { error: memberError } = await sb
+    .from("ministry_members")
+    .upsert(
+      {
+        ministry_id: ministryId,
+        profile_id: memberId,
+        role: "member",
+        functions: input.ministry_functions || [],
+      },
+      { onConflict: "ministry_id, profile_id" },
+    );
+
+  if (memberError) {
+    console.error("[addManualMember] Erro ao vincular membro:", memberError);
+    return { success: false, message: memberError.message };
+  }
+
+  // 3. Log de auditoria
+  void logAuditAction({
+    ministryId,
+    orgId,
+    action: "member_added",
+    targetType: "member",
+    targetId: memberId,
+    targetName: input.name.trim(),
+    metadata: { source: "manual", by: createdByAdminName },
+  });
+
+  return {
+    success: true,
+    memberId,
+    message: "Membro adicionado manualmente à equipe.",
+  };
 };

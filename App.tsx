@@ -547,6 +547,7 @@ const InnerApp = () => {
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [eventDetailsModal, setEventDetailsModal] = useState<{
     isOpen: boolean;
     event: any | null;
@@ -625,6 +626,24 @@ const InnerApp = () => {
         "error",
       );
     }
+  };
+
+  const handleAddMember = async (data: { name: string; whatsapp: string; birthDate?: string; ministry_functions: string[] }) => {
+    if (!orgId || !ministryId) {
+      throw new Error("Organização ou ministério não identificado.");
+    }
+    const result = await Supabase.addManualMember(
+      ministryId,
+      orgId,
+      data,
+      activeUser?.name || "Administrador",
+    );
+    if (!result.success) {
+      throw new Error(result.message || "Erro ao adicionar membro.");
+    }
+    addToast("Membro adicionado com sucesso!", "success");
+    await refreshData();
+    setShowAddMemberModal(false);
   };
 
   const RAW_MAIN_NAV = useMemo(
@@ -1303,6 +1322,7 @@ const InnerApp = () => {
           await Supabase.updateMemberData(id, orgId!, data);
           refreshData();
         }}
+        onAddMember={handleAddMember}
         isPro={activeUser?.isPro ?? false}
         isEnterprise={activeUser?.isEnterprise ?? false}
         notifications={notifications}

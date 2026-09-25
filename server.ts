@@ -1,5 +1,5 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
+import { createServer as createViteServer, loadEnv } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import { generateScheduleWithAI } from "./services/aiOrchestrator.ts";
@@ -8,6 +8,9 @@ import { polishAnnouncementAI } from "./services/aiService.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Carregar variáveis de ambiente do .env para o Node (process.env)
+Object.assign(process.env, loadEnv(process.env.NODE_ENV || "development", process.cwd(), ""));
 
 async function startServer() {
   const app = express();

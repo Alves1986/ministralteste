@@ -138,18 +138,18 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
             // ─── BYPASS SUPER ADMIN SEM ORG ─────────────────────────────────────────────
             // Conta contato.ministral@gmail.com: is_super_admin=true, organization_id=NULL.
             // Não precisa de org para funcionar — acessa apenas o SuperAdminDashboard.
-            if (!orgId && profile.is_super_admin) {
+            if (!orgId && (profile.is_super_admin || profile.is_admin)) {
                 if (activeChannelRef.current) {
                     activeChannelRef.current.unsubscribe();
                     activeChannelRef.current = null;
                 }
                 const saUser: User = {
                     id: profile.id,
-                    name: profile.name || 'Super Admin',
+                    name: profile.name || 'Administrator',
                     email: profile.email || sessionUser.email,
                     access_role: 'admin',
-                    isSuperAdmin: true,
-                    isOrgAdmin: false,
+                    isSuperAdmin: !!profile.is_super_admin,
+                    isOrgAdmin: !!profile.is_admin,
                     isPro: false,
                     isEnterprise: false,
                     organizationId: '',

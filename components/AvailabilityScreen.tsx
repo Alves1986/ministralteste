@@ -659,7 +659,37 @@ export const AvailabilityScreen: React.FC<Props> = ({
                         })}
                     </div>
 
-                    <div className="mt-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                    <div className="mt-6 pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                            <button 
+                                onClick={() => {
+                                    if (isSaveLocked) return;
+                                    const dateBase = `${currentMonth}-${String(dayModalOpen).padStart(2, '0')}`;
+                                    setIsSyncing(true);
+                                    setSaveState('dirty');
+                                    setTempDates(prev => {
+                                        let updated = prev.filter(d => !d.startsWith(dateBase));
+                                        updated.push(dateBase);
+                                        return updated;
+                                    });
+                                }}
+                                className="py-2.5 rounded-xl text-secondary dark:text-white font-bold text-sm bg-secondary/10 dark:bg-secondary/5 hover:bg-secondary/20 dark:hover:bg-secondary/10 transition-colors flex items-center justify-center gap-2 border border-secondary/20 dark:border-secondary/30"
+                            >
+                                <Check size={14} /> Marcar todos
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    if (isSaveLocked) return;
+                                    const dateBase = `${currentMonth}-${String(dayModalOpen).padStart(2, '0')}`;
+                                    setIsSyncing(true);
+                                    setSaveState('dirty');
+                                    setTempDates(prev => prev.filter(d => !d.startsWith(dateBase)));
+                                }}
+                                className="py-2.5 rounded-xl text-red-500 dark:text-red-400 font-bold text-sm bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors flex items-center justify-center gap-2 border border-red-200 dark:border-red-800/30"
+                            >
+                                <Ban size={14} /> Limpar dia
+                            </button>
+                        </div>
                         <button 
                             onClick={() => {
                                 handleToggleDate(dayModalOpen);
