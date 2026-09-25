@@ -144,7 +144,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     activeChannelRef.current = null;
                 }
                 
-                const adminUser = {
+                const adminUser: User = {
                     id: profile.id,
                     name: profile.name || 'Administrador',
                     email: profile.email || sessionUser.email,
