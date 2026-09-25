@@ -92,7 +92,7 @@ const PROMPTS: Record<AI_TASKS, (data: any) => string> = {
   [AI_TASKS.MEMBER_ANALYSIS]: (data) => `Analise membros (ativos/sobrecarregados). DADOS: ${JSON.stringify(data)}. Retorne Markdown.`,
   [AI_TASKS.PREVENTIVE_ALERT]: (data) => `Detecte conflitos preventivamente. DADOS: ${JSON.stringify(data)}. Retorne Markdown.`,
   [AI_TASKS.SCALE_GENERATION]: (_data) => '',
-  [AI_TASKS.WHATSAPP_MSG_REWRITE]: (data) => `Reescreva para WhatsApp em tom ${data.tone}. Texto: ${data.text}. Retorne texto puro.`
+  [AI_TASKS.WHATSAPP_MSG_REWRITE]: (data) => `Reescreva para WhatsApp em tom ${data.tone}. Texto: ${data.text}. Retorne texto puro.`,
 };
 
 async function callOpenRouterAI(prompt: string, taskType: AI_TASKS, modelId: string): Promise<string> {
@@ -159,7 +159,6 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
     const fullPrompt = `${GLOBAL_PERSONALITY}\nCONTEXTO: ${JSON.stringify(context)}\nTAREFA: ${promptGenerator(payload)}`;
     const content = await callWithFallback(fullPrompt, taskType, preferredModel);
     
-    // Simple parse
     if (JSON_TASKS.has(taskType)) {
       try {
         const match = content.match(/```json\s*([\s\S]*?)\s*```/i) || [null, content];
@@ -174,6 +173,32 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
   }
 }
 
+/**
+ * Gera a escala utilizando IA via OpenRouter.
+ * Esta função é chamada pelo aiScheduleService para obter a alocação de membros.
+ */
+export async function generateScheduleWithAI(input: any): Promise<string> {
+    console.log("[AI Orchestrator] Generating schedule with AI...");
+    
+    try {
+        const result = await runAI(
+            AI_TASKS.SCALE_GENERATION, 
+            { 
+                organization_name: input.organizationName || 'Ministério', 
+                ministry_name: input.ministryName || 'Ministério',
+                total_members: input.members?.length || 0,
+                active_members: input.members?.length || 0,
+                roles: input.roles || []
+            }, 
+            input
+        );
+        
+        return typeof result === 'string' ? result : JSON.stringify(result);
+    } catch (err: any) {
+        console.error("[AI Orchestrator] AI Generation failed, switching to local fallback:", err.message);
+        return await generateScheduleLocally(input);
+    }
+}
 
 /**
  * Fallback local para geração de escala caso as APIs de IA falhem.
@@ -182,8 +207,6 @@ export async function runAI(taskType: AI_TASKS, context: AIContext | any, payloa
 export async function generateScheduleLocally(input: any): Promise<string> {
     console.log("[AI Orchestrator] Running local fallback schedule generation...");
     
-    // Simulação de resposta de escala formatada em markdown
-    // Em um sistema real, aqui haveria a lógica de loop por data e função
     return `### 🗓️ Escala Gerada Localmente (Fallback)
     
 A escala foi gerada utilizando o algoritmo local devido a uma instabilidade nas APIs de IA.
