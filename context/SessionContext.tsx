@@ -144,7 +144,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     activeChannelRef.current = null;
                 }
                 
-                const adminUser: User = {
+                const createAdminUser = (profile: any, sessionUser: any, orgId: string, activeMinistry: string, allowedMinistries: string[], ministry_functions: string[]) => ({
                     id: profile.id,
                     name: profile.name || 'Administrador',
                     email: profile.email || sessionUser.email,
@@ -153,14 +153,16 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     isOrgAdmin: !!profile.is_admin,
                     isPro: true,
                     isEnterprise: true,
-                    organizationId: orgId || '',
-                    ministryId: activeMinistry || '',
+                    organizationId: orgId,
+                    ministryId: activeMinistry,
                     allowedMinistries: allowedMinistries,
                     ministry_functions: ministry_functions,
                     avatar_url: profile.avatar_url,
                     whatsapp: profile.whatsapp,
                     birthDate: profile.birth_date,
-                };
+                });
+
+                const adminUser = createAdminUser(profile, sessionUser, orgId, activeMinistry, allowedMinistries, ministry_functions);
                 if (isMountedRef.current) {
                     setUser(adminUser);
                     setOrganization(orgDetails);
