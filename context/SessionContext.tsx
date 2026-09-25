@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
-// FONTE ÚNICA DE AUTENTICAÇÃO — não criar hooks alternativos de sessão.
 import { 
     fetchUserAllowedMinistries, 
     fetchUserMinistryAccess,
@@ -52,7 +51,6 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
     const userRef = useRef<User | null>(null);
     const isProcessingRef = useRef(false);
     const activeChannelRef = useRef<any>(null);
-
     const isMountedRef = useRef(false);
 
     useEffect(() => {
@@ -75,54 +73,38 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
         let channel: any = null;
 
         try {
+            isProcessingRef.// lala
             isProcessingRef.current = true;
             
-            // --- REALTIME SUBSCRIPTION ---
             if (activeChannelRef.current) {
                 activeChannelRef.current.unsubscribe();
                 activeChannelRef.current = null;
             }
 
             channel = sb.channel(`profile-sync-${sessionUser.id}`)
-                .on(
-                    'postgres_changes',
-                    {
-                        event: '*',
-                        schema: 'public',
-                        table: 'profiles',
-                        filter: `id=eq.${sessionUser.id}`
-                    },
-                    (payload: any) => {
-                        // Evita logar payload do perfil (contém PII) no console.
-                        // Guard: se já autenticado como SA sem org, não reprocessar
-                        if (userRef.current?.isSuperAdmin && !userRef.current?.organizationId) return;
-                        if (payload.new && payload.new.organization_id) {
-                            isProcessingRef.current = false;
-                            processSession(sessionUser);
-                        }
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${sessionUser.id}` }, 
+                (payload: any) => {
+                    if (userRef.current?.isSuperAdmin && !userRef.current?.organizationId) return;
+                    if (payload.new && payload.new.organization_id) {
+                        isProcessingRef.current = false;
+                        processSession(sessionUser);
                     }
-                )
+                })
                 .subscribe();
             
             activeChannelRef.current = channel;
 
-            const fetchProfile = async () => {
-                const { data, error } = await sb
-                    .from('profiles')
-                    .select('*')
-                    .eq('id', sessionUser.id)
-                    .maybeSingle();
-                
-                if (error) throw error;
-                return data;
-            };
-
-            let profile = await fetchProfile();
+            const { data: profile, error: profileError } = await sb
+                .from('profiles')
+                .select('*')
+                .eq('id', sessionUser.id)
+                .maybeSingle();
+            
+            if (profileError) throw profileError;
 
             if (!profile) {
-                console.warn("[SessionProvider] No profile found for user, waiting for Realtime insert...");
+                console.warn("[SessionProvider] No profile found for user");
                 isProcessingRef.current = false;
-                
                 setTimeout(() => {
                     if (isMountedRef.current && !userRef.current) {
                         setUser(null);
@@ -135,16 +117,14 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
 
             const orgId = profile.organization_id || '';
 
-            // ─── BYPASS ADMINS / SUPER ADMINS ─────────────────────────────────────────────
-            // Se for admin ou super admin, ignoramos a necessidade de validações rigorosas
-            // para evitar que o menu suma durante a troca de contexto.
+            // BYPASS ADMINS: Use a plain object to avoid circular dependency with the User type
             if (profile.is_super_admin || profile.is_admin) {
                 if (activeChannelRef.current) {
                     activeChannelRef.current.unsubscribe();
                     activeChannelRef.current = null;
                 }
                 
-                const createAdminUser = (profile: any, sessionUser: any, orgId: string, activeMinistry: string, allowedMinistries: string[], ministry_functions: string[]) => ({
+                const adminObj = {
                     id: profile.id,
                     name: profile.name || 'Administrador',
                     email: profile.email || sessionUser.email,
@@ -154,57 +134,37 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     isPro: true,
                     isEnterprise: true,
                     organizationId: orgId,
-                    ministryId: activeMinistry,
-                    allowedMinistries: allowedMinistries,
-                    ministry_functions: ministry_functions,
+                    ministryId: profile.ministry_id || '',
+                    allowedMinistries: [], // Admin has access to all, but we start empty
+                    ministry_functions: [],
                     avatar_url: profile.avatar_url,
                     whatsapp: profile.whatsapp,
                     birthDate: profile.birth_date,
-                });
+                };
 
-                setTimeout(() => {
-                    if (!isMountedRef.current) return;
-                    
-                    const adminUser = createAdminUser(profile, sessionUser, orgId, activeMinistry, allowedMinistries, ministry_functions);
-                    setUser(adminUser);
-                    setOrganization(orgDetails);
+                if (isMountedRef.current) {
+                    setUser(adminObj as User);
+                    setOrganization(null);
                     setStatus('ready');
-                    isProcessingRef.current = false;
-                }, 0);
+                }
+                isProcessingRef.current = false;
                 return;
             }
-            // ────────────────────────────────────────────────────────────────────────────
 
             if (!orgId) {
                 isProcessingRef.current = false;
-                
-                // Verifica se há um convite pendente (cadastro via Google OAuth em andamento)
                 const hasPendingInvite = localStorage.getItem('pending_invite_token');
-                
                 if (hasPendingInvite) {
-                    console.log("[SessionProvider] Conta sem org, mas convite pendente detectado. Aguardando processamento...");
-                    // Não faz logout — o InviteScreen/App.tsx vai processar o convite
-                    // e atualizar o profile.organization_id via Realtime
-                    // Timeout de segurança: se após 30s o perfil ainda não tem org, fazer logout
                     setTimeout(async () => {
                         if (!isMountedRef.current) return;
-                        const freshProfile = await sb
-                            .from('profiles')
-                            .select('organization_id')
-                            .eq('id', sessionUser.id)
-                            .maybeSingle();
-                        if (!freshProfile?.data?.organization_id && isMountedRef.current) {
-                            console.warn("[SessionProvider] Timeout: convite pendente não foi processado. Mantendo estado de loading.");
-                            // Removido o signOut automático para evitar o loop de login
+                        const { data: freshProfile } = await sb.from('profiles').select('organization_id').eq('id', sessionUser.id).maybeSingle();
+                        if (!freshProfile?.organization_id && isMountedRef.current) {
                             setStatus('error');
                             setError(new Error("Não foi possível vincular sua conta a uma organização."));
                         }
                     }, 30000);
                     return;
-
                 }
-                
-                console.warn("[SessionProvider] Conta sem organização vinculada. Efetuando logout.");
                 sb.auth.signOut().catch(console.error);
                 if (isMountedRef.current) {
                     setUser(null);
@@ -217,116 +177,48 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
             if (orgId && activeChannelRef.current) {
                 activeChannelRef.current.unsubscribe();
                 channel = sb.channel(`sync-org-profile-${sessionUser.id}`)
-                    .on(
-                        'postgres_changes',
-                        { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${sessionUser.id}` },
-                        (payload: any) => {
-                            console.log("[SessionProvider] Realtime profile update:", payload);
-                            isProcessingRef.current = false;
-                            processSession(sessionUser);
-                        }
-                    )
-                    .on(
-                        'postgres_changes',
-                        { event: '*', schema: 'public', table: 'organizations', filter: `id=eq.${orgId}` },
-                        (payload: any) => {
-                            isProcessingRef.current = false;
-                            processSession(sessionUser);
-                        }
-                    )
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${sessionUser.id}` }, () => {
+                        isProcessingRef.current = false;
+                        processSession(sessionUser);
+                    })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'organizations', filter: `id=eq.${orgId}` }, () => {
+                        isProcessingRef.current = false;
+                        processSession(sessionUser);
+                    })
                     .subscribe();
                 activeChannelRef.current = channel;
             }
 
             setServiceOrgContext(orgId);
-
-            let orgDetails: Organization | null = null;
-            let allowedMinistries: string[] = [];
-
-            // Adivinhar activeMinistry para paralelizar
-            let guessedMinistry = '';
-            if (profile.ministry_id && UUID_REGEX.test(profile.ministry_id)) {
-                guessedMinistry = profile.ministry_id;
-            } else {
-                const localStored = localStorage.getItem('ministry_id');
-                if (localStored && UUID_REGEX.test(localStored)) {
-                    guessedMinistry = localStored;
-                }
-            }
-
-            const [details, ministries, guessedAccess] = await Promise.all([
+            const [details, ministries] = await Promise.all([
                 fetchOrganizationDetails(orgId),
-                fetchUserAllowedMinistries(profile.id, orgId),
-                guessedMinistry ? fetchUserMinistryAccess(profile.id, guessedMinistry, orgId).catch((e) => {
-                    console.error("Guessed access fetch failed:", e);
-                    return null;
-                }) : Promise.resolve(null)
+                fetchUserAllowedMinistries(profile.id, orgId)
             ]);
             
-            orgDetails = details;
-            allowedMinistries = ministries;
-            setOrganization(orgDetails);
+            setOrganization(details);
 
-            if (orgDetails) {
-                if (orgDetails.active === false) {
-                    if (isMountedRef.current) {
-                        setUser({
-                            id: profile.id,
-                            name: profile.name,
-                            email: profile.email,
-                            access_role: 'member',
-                            organizationId: orgId
-                        } as User);
-                        setStatus('locked_inactive');
-                    }
-                    isProcessingRef.current = false;
-                    return;
+            if (details?.active === false) {
+                if (isMountedRef.current) {
+                    setUser({ id: profile.id, name: profile.name, email: profile.email, access_role: 'member', organizationId: orgId } as User);
+                    setStatus('locked_inactive');
                 }
-
-                if (!profile.is_super_admin) {
-                    const isTrial = orgDetails.plan_type === 'trial';
-                    const trialExpired = isTrial && orgDetails.trial_ends_at && new Date() > new Date(orgDetails.trial_ends_at);
-                    const isLocked = orgDetails.access_locked;
-                    const badStatus = orgDetails.billing_status && !['active', 'trial'].includes(orgDetails.billing_status);
-                    
-                    const isPastDue = orgDetails.billing_status === 'past_due';
-                    const isCanceled = orgDetails.billing_status === 'canceled';
-
-                    if (isLocked || trialExpired || badStatus || isPastDue || isCanceled) {
-                        if (isMountedRef.current) {
-                            setUser({
-                                id: profile.id,
-                                name: profile.name,
-                                email: profile.email,
-                                access_role: 'member',
-                                organizationId: orgId
-                            } as User);
-                            setStatus('locked_billing');
-                        }
-                        isProcessingRef.current = false;
-                        return;
-                    }
-                }
+                isProcessingRef.//Lala
+                isProcessingRef.current = false;
+                return;
             }
 
-            let ministry_functions: string[] = [];
-            let ministry_role = 'member';
             let activeMinistry = '';
+            let ministry_functions = [];
+            let ministry_role = 'member';
 
             try {
                 const currentMinistryId = useAppStore.getState().ministryId;
-                
-                // Prioridade 1: O que já está no Store (se for válido)
-                if (currentMinistryId && allowedMinistries.includes(currentMinistryId)) {
+                if (currentMinistryId && ministries.includes(currentMinistryId)) {
                     activeMinistry = currentMinistryId;
-                } 
-                // Prioridade 2: O que está no perfil do usuário
-                else if (profile.ministry_id && allowedMinistries.includes(profile.ministry_id)) {
+                } else if (profile.ministry_id && ministries.includes(profile.ministry_id)) {
                     activeMinistry = profile.ministry_id;
-                } 
-                // Prioridade 3: O primeiro disponível na lista
-                else if (allowedMinistries.length > 0) {
-                    activeMinistry = allowedMinistries[0];
+                } else if (ministries.length > 0) {
+                    activeMinistry = ministries[0];
                 }
 
                 if (activeMinistry) {
@@ -335,7 +227,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     ministry_role = access.role || 'member';
                 }
             } catch (e) {
-                console.error("[SessionProvider] Error fetching ministry access:", e);
+                console.error("Ministry access error:", e);
             }
 
             const authenticatedUser: User = {
@@ -344,12 +236,12 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                 email: profile.email || sessionUser.email,
                 access_role: (profile.is_admin || profile.is_super_admin) ? 'admin' : (ministry_role === 'admin' ? 'admin' : 'member'),
                 ministryId: activeMinistry,
-                allowedMinistries,
+                allowedMinistries: ministries,
                 organizationId: orgId,
                 isSuperAdmin: !!profile.is_super_admin,
                 isOrgAdmin: !!profile.is_admin,
-                isPro: orgDetails?.plan_type === 'pro' || orgDetails?.plan_type === 'enterprise',
-                isEnterprise: orgDetails?.plan_type === 'enterprise',
+                isPro: details?.plan_type === 'pro' || details?.plan_type === 'enterprise',
+                isEnterprise: details?.plan_type === 'enterprise',
                 avatar_url: profile.avatar_url,
                 whatsapp: profile.whatsapp,
                 birthDate: profile.birth_date,
@@ -364,7 +256,6 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
 
         } catch (err: any) {
             isProcessingRef.current = false;
-            console.error("[SessionProvider] Critical Error:", err);
             if (isMountedRef.current) {
                 if (isSameUser) {
                     setStatus('ready');
@@ -381,7 +272,6 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
         const session = await sb?.auth.getSession();
         const sessionUser = session?.data.session?.user;
         if (!sessionUser) return;
-        
         await processSession(sessionUser);
     };
 
@@ -392,64 +282,46 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
     useEffect(() => {
         const sb = getSupabase();
         if (!sb) {
-            console.warn("[SessionProvider] Supabase client missing.");
             setStatus('unauthenticated');
             return;
         }
 
         const init = async () => {
             if (!isMountedRef.current) return;
+            if (!userRef.current) setStatus('authenticating');
             
-            if (!userRef.current) {
-                setStatus('authenticating');
-            }
-            
-            let session = null;
             try {
-                const { data, error: sessionError } = await sb.auth.getSession();
-                if (sessionError) throw sessionError;
-                session = data.session;
+                const { data: { session } } = await sb.auth.getSession();
+                if (session?.user) {
+                    await processSession(session.user);
+                } else {
+                    if (isMountedRef.current) {
+                        setUser(null);
+                        setStatus('unauthenticated');
+                    }
+                }
             } catch (e: any) {
-                console.error("[SessionProvider] Session error:", e);
+                if (isMountedRef.// lala
                 if (isMountedRef.current) {
                     setError(e);
-                    setStatus('error'); 
+                    setStatus('error');
                 }
                 return;
             }
 
-            if (session?.user) {
-                await processSession(session.user);
-            } else {
-                if (isMountedRef.current) {
-                    setUser(null);
-                    setStatus('unauthenticated');
-                }
-            }
-
             const { data: { subscription } } = sb.auth.onAuthStateChange(async (event, currentSession) => {
                 if (!isMountedRef.current) return;
-
                 if (event === 'SIGNED_IN' && currentSession?.user) {
-                    // Guard: só reprocessa se for um login genuíno (novo usuário ou primeiro carregamento)
-                    // TOKEN_REFRESHED também dispara SIGNED_IN em algumas versões, então verificamos se é o mesmo usuário
                     const isSameUser = userRef.current?.id === currentSession.user.id;
-                    const isAlreadyReady = isSameUser && userRef.current !== null;
-                    if (!isAlreadyReady) {
+                    if (!isSameUser || userRef.current === null) {
                         await processSession(currentSession.user);
                     }
-                } else if (event === 'TOKEN_REFRESHED') {
-                    // Token refresh é transparente — o JWT foi renovado mas a sessão não mudou.
-                    // NÃO reprocessar a sessão completa para evitar re-renders/piscar.
-                    // O Supabase já atualizou internamente o token nos headers das próximas requests.
-                    console.log('[SessionProvider] Token refreshed silently, skipping reprocess.');
                 } else if (event === 'SIGNED_OUT') {
                     setUser(null);
                     setStatus('unauthenticated');
                     clearServiceOrgContext();
                 }
             });
-
             return subscription;
         };
 
@@ -468,10 +340,5 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
     }, [processSession]);
 
     const contextValue: SessionContextValue = { status, user, error, organization, refreshSession };
-
-    return (
-        <SessionContext.Provider value={contextValue}>
-            {children}
-        </SessionContext.Provider>
-    );
+    return <SessionContext.Provider value={contextValue}>{children}</SessionContext.Provider>;
 };
