@@ -135,34 +135,35 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
 
             const orgId = profile.organization_id || '';
 
-            // ─── BYPASS SUPER ADMIN SEM ORG ─────────────────────────────────────────────
-            // Conta contato.ministral@gmail.com: is_super_admin=true, organization_id=NULL.
-            // Não precisa de org para funcionar — acessa apenas o SuperAdminDashboard.
-            if (!orgId && (profile.is_super_admin || profile.is_admin)) {
+            // ─── BYPASS ADMINS / SUPER ADMINS ─────────────────────────────────────────────
+            // Se for admin ou super admin, ignoramos a necessidade de validações rigorosas
+            // para evitar que o menu suma durante a troca de contexto.
+            if (profile.is_super_admin || profile.is_admin) {
                 if (activeChannelRef.current) {
                     activeChannelRef.current.unsubscribe();
                     activeChannelRef.current = null;
                 }
-                const saUser: User = {
+                
+                const adminUser: User = {
                     id: profile.id,
-                    name: profile.name || 'Administrator',
+                    name: profile.name || 'Administrador',
                     email: profile.email || sessionUser.email,
                     access_role: 'admin',
                     isSuperAdmin: !!profile.is_super_admin,
                     isOrgAdmin: !!profile.is_admin,
-                    isPro: false,
-                    isEnterprise: false,
-                    organizationId: '',
-                    ministryId: '',
-                    allowedMinistries: [],
-                    ministry_functions: [],
+                    isPro: true,
+                    isEnterprise: true,
+                    organizationId: orgId || '',
+                    ministryId: activeMinistry || '',
+                    allowedMinistries: allowedMinistries,
+                    ministry_functions: ministry_functions,
                     avatar_url: profile.avatar_url,
                     whatsapp: profile.whatsapp,
                     birthDate: profile.birth_date,
                 };
                 if (isMountedRef.current) {
-                    setUser(saUser);
-                    setOrganization(null);
+                    setUser(adminUser);
+                    setOrganization(orgDetails);
                     setStatus('ready');
                 }
                 isProcessingRef.current = false;
