@@ -73,7 +73,6 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
         let channel: any = null;
 
         try {
-            isProcessingRef.// lala
             isProcessingRef.current = true;
             
             if (activeChannelRef.current) {
@@ -117,7 +116,6 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
 
             const orgId = profile.organization_id || '';
 
-            // BYPASS ADMINS: Use a plain object to avoid circular dependency with the User type
             if (profile.is_super_admin || profile.is_admin) {
                 if (activeChannelRef.current) {
                     activeChannelRef.current.unsubscribe();
@@ -135,7 +133,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     isEnterprise: true,
                     organizationId: orgId,
                     ministryId: profile.ministry_id || '',
-                    allowedMinistries: [], // Admin has access to all, but we start empty
+                    allowedMinistries: [],
                     ministry_functions: [],
                     avatar_url: profile.avatar_url,
                     whatsapp: profile.whatsapp,
@@ -202,7 +200,6 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     setUser({ id: profile.id, name: profile.name, email: profile.email, access_role: 'member', organizationId: orgId } as User);
                     setStatus('locked_inactive');
                 }
-                isProcessingRef.//Lala
                 isProcessingRef.current = false;
                 return;
             }
@@ -301,7 +298,6 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     }
                 }
             } catch (e: any) {
-                if (isMountedRef.// lala
                 if (isMountedRef.current) {
                     setError(e);
                     setStatus('error');
