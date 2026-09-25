@@ -122,12 +122,6 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     activeChannelRef.current = null;
                 }
                 
-                // Para Admins, buscamos os ministérios e a função do ministério ativo para liberar o menu
-                const [ministries, guessedAccess] = await Promise.all([
-                    fetchUserAllowedMinistries(profile.id, orgId),
-                    guessedMinistry ? fetchUserMinistryAccess(profile.id, guessedMinistry, orgId).catch(() => null) : Promise.resolve(null)
-                ]);
-
                 const adminObj = {
                     id: profile.id,
                     name: profile.name || 'Administrador',
@@ -138,9 +132,9 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     isPro: true,
                     isEnterprise: true,
                     organizationId: orgId,
-                    ministryId: guessedMinistry || (ministries.length > 0 ? ministries[0] : ''),
-                    allowedMinistries: ministries,
-                    ministry_functions: guessedAccess?.functions || [],
+                    ministryId: profile.ministry_id || '',
+                    allowedMinistries: [],
+                    ministry_functions: [],
                     avatar_url: profile.avatar_url,
                     whatsapp: profile.whatsapp,
                     birthDate: profile.birth_date,
@@ -148,7 +142,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
 
                 if (isMountedRef.current) {
                     setUser(adminObj as User);
-                    setOrganization(orgDetails);
+                    setOrganization(null);
                     setStatus('ready');
                 }
                 isProcessingRef.current = false;
