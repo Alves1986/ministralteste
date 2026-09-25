@@ -189,16 +189,14 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                             .eq('id', sessionUser.id)
                             .maybeSingle();
                         if (!freshProfile?.data?.organization_id && isMountedRef.current) {
-                            console.warn("[SessionProvider] Timeout: convite pendente não foi processado. Efetuando logout.");
-                            localStorage.removeItem('pending_invite_token');
-                            localStorage.removeItem('pending_invite_roles');
-                            sb.auth.signOut().catch(console.error);
-                            setUser(null);
-                            setStatus('unauthenticated');
-                            if (channel) channel.unsubscribe();
+                            console.warn("[SessionProvider] Timeout: convite pendente não foi processado. Mantendo estado de loading.");
+                            // Removido o signOut automático para evitar o loop de login
+                            setStatus('error');
+                            setError(new Error("Não foi possível vincular sua conta a uma organização."));
                         }
                     }, 30000);
                     return;
+
                 }
                 
                 console.warn("[SessionProvider] Conta sem organização vinculada. Efetuando logout.");
@@ -311,30 +309,28 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
             let activeMinistry = '';
 
             try {
-
                 const currentMinistryId = useAppStore.getState().ministryId;
-                if (profile.ministry_id && !currentMinistryId) {
-                    useAppStore.getState().setMinistryId(profile.ministry_id);
-                }
-
-                if (guessedMinistry && allowedMinistries.includes(guessedMinistry)) {
-                    activeMinistry = guessedMinistry;
-                } else if (allowedMinistries.length > 0) {
+                
+                // Prioridade 1: O que já está no Store (se for válido)
+                if (currentMinistryId && allowedMinistries.includes(currentMinistryId)) {
+                    activeMinistry = currentMinistryId;
+                } 
+                // Prioridade 2: O que está no perfil do usuário
+                else if (profile.ministry_id && allowedMinistries.includes(profile.ministry_id)) {
+                    activeMinistry = profile.ministry_id;
+                } 
+                // Prioridade 3: O primeiro disponível na lista
+                else if (allowedMinistries.length > 0) {
                     activeMinistry = allowedMinistries[0];
                 }
 
                 if (activeMinistry) {
-                    if (activeMinistry === guessedMinistry && guessedAccess) {
-                        ministry_functions = guessedAccess.functions;
-                        ministry_role = guessedAccess.role;
-                    } else {
-                        const access = await fetchUserMinistryAccess(profile.id, activeMinistry, orgId);
-                        ministry_functions = access.functions;
-                        ministry_role = access.role;
-                    }
+                    const access = await fetchUserMinistryAccess(profile.id, activeMinistry, orgId);
+                    ministry_functions = access.functions || [];
+                    ministry_role = access.role || 'member';
                 }
             } catch (e) {
-                console.error("[SessionProvider] Error fetching details (non-critical):", e);
+                console.error("[SessionProvider] Error fetching ministry access:", e);
             }
 
             const authenticatedUser: User = {
