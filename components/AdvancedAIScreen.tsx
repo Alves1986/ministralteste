@@ -28,7 +28,7 @@ import {
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
 import { useToast } from './Toast';
 import { getSupabase } from '../services/supabaseService';
-import { runAI, AI_TASKS, AI_MODELS, DEFAULT_MODEL, OPENROUTER_MODELS, DEFAULT_OPENROUTER_MODEL } from '../services/aiOrchestrator';
+import { runAI, AI_TASKS, AI_MODELS, DEFAULT_MODEL } from '../services/aiOrchestrator';
 import { generateAISchedule } from '../services/aiScheduleService';
 import { FeedbackState } from './ui';
 
