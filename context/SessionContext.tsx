@@ -121,32 +121,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     activeChannelRef.current.unsubscribe();
                     activeChannelRef.current = null;
                 }
-                
-                const adminObj = {
-                    id: profile.id,
-                    name: profile.name || 'Administrador',
-                    email: profile.email || sessionUser.email,
-                    access_role: 'admin',
-                    isSuperAdmin: !!profile.is_super_admin,
-                    isOrgAdmin: !!profile.is_admin,
-                    isPro: true,
-                    isEnterprise: true,
-                    organizationId: orgId,
-                    ministryId: profile.ministry_id || '',
-                    allowedMinistries: [],
-                    ministry_functions: [],
-                    avatar_url: profile.avatar_url,
-                    whatsapp: profile.whatsapp,
-                    birthDate: profile.birth_date,
-                };
-
-                if (isMountedRef.current) {
-                    setUser(adminObj as User);
-                    setOrganization(null);
-                    setStatus('ready');
-                }
-                isProcessingRef.current = false;
-                return;
+                // Continue to fetch org/ministry details instead of returning early
             }
 
             if (!orgId) {
@@ -242,7 +217,10 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                 avatar_url: profile.avatar_url,
                 whatsapp: profile.whatsapp,
                 birthDate: profile.birth_date,
-                ministry_functions
+                ministry_functions: (profile.is_admin || profile.is_super_admin) 
+                    ? (ministry_functions.length > 0 ? ministry_functions : ['Lider', 'Admin']) 
+                    : ministry_functions
+            };
             };
 
             if (isMountedRef.current) {
